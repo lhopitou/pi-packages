@@ -1,0 +1,10 @@
+{
+  "name": "pi-web-access",
+  "version": "1.0.0",
+  "description": "Web search (Exa MCP, zero-config) and content extraction for Pi agent",
+  "type": "module",
+  "private": true,
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}

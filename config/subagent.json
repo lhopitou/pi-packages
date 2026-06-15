@@ -1,0 +1,7 @@
+{
+  "maxRetries": 2,
+  "timeoutMs": 900000,
+  "permissionConfigPath": "~/.pi/agent/permissions.json",
+  "permissionExtensionPath": "~/.pi/agent/extensions/permissions",
+  "concurrencyLimit": 4
+}

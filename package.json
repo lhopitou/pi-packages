@@ -1,0 +1,42 @@
+{
+  "name": "pi-packages",
+  "version": "1.0.0",
+  "description": "Personal pi extensions, agents, and tools",
+  "type": "module",
+  "keywords": ["pi-package"],
+  "private": true,
+  "scripts": {
+    "clean": "rm -rf extensions/pi-web-access/node_modules",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "p-limit": "^6.1.0",
+    "turndown": "^7.2.0",
+    "unpdf": "^1.6.2"
+  },
+  "devDependencies": {
+    "@types/turndown": "^5.0.0",
+    "typescript": "^5.7.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/pi-web-access/index.ts",
+      "./extensions/pi-subagent/index.ts",
+      "./extensions/scopy.ts",
+      "./extensions/git-checkpoint.ts",
+      "./extensions/permissions/index.ts",
+      "./extensions/rg-fd.ts",
+      "./extensions/get-system-prompt.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  }
+}

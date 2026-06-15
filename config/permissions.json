@@ -1,0 +1,136 @@
+{
+  "rules": [
+    {
+      "tool": "bash",
+      "pattern": "\\brm\\s+(-rf?|--recursive)\\b",
+      "action": "ask",
+      "description": "Recursive delete"
+    },
+    {
+      "tool": "bash",
+      "pattern": "\\bsudo\\b",
+      "action": "ask",
+      "description": "Privilege escalation"
+    },
+    {
+      "tool": "bash",
+      "pattern": "\\b(chmod|chown)\\b.*777",
+      "action": "ask",
+      "description": "World-writable permissions"
+    },
+    {
+      "tool": "bash",
+      "pattern": "\\bdd\\s+if=",
+      "action": "ask",
+      "description": "Direct disk operations"
+    },
+    {
+      "tool": "bash",
+      "pattern": "\\bmkfs\\b",
+      "action": "deny",
+      "description": "Format filesystem"
+    },
+    {
+      "tool": "bash",
+      "pattern": "\\b(ssh|scp|rsync)\\b",
+      "action": "ask",
+      "description": "Remote access"
+    },
+    {
+      "tool": "bash",
+      "pattern": "\\bcurl\\b.*\\|\\s*(ba)?sh",
+      "action": "deny",
+      "description": "Pipe remote script to shell"
+    },
+    {
+      "tool": "bash",
+      "pattern": "\\bwget\\b.*\\|\\s*(ba)?sh",
+      "action": "deny",
+      "description": "Pipe remote download to shell"
+    },
+    {
+      "tool": "bash",
+      "pattern": ">/dev/(sd|nvme|vd)",
+      "action": "deny",
+      "description": "Write directly to block device"
+    },
+    {
+      "tool": "bash",
+      "pattern": "\\b(nc|ncat|netcat|socat)\\b",
+      "action": "ask",
+      "description": "Network connection tool (potential exfiltration)"
+    },
+    {
+      "tool": "bash",
+      "pattern": "\\b(aws|gcloud|az)\\s+\\w+\\s+download\\b",
+      "action": "ask",
+      "description": "Cloud CLI data download"
+    },
+    {
+      "tool": "bash",
+      "pattern": "/dev/tcp/",
+      "action": "deny",
+      "description": "Bash /dev/tcp reverse shell"
+    },
+    {
+      "tool": "bash",
+      "pattern": "/dev/udp/",
+      "action": "deny",
+      "description": "Bash /dev/udp reverse shell"
+    },
+    {
+      "tool": "write",
+      "pattern": "**/.env*",
+      "action": "ask",
+      "description": "Environment files"
+    },
+    {
+      "tool": "write",
+      "pattern": "**/.git/**",
+      "action": "ask",
+      "description": "Git internals"
+    },
+    {
+      "tool": "edit",
+      "pattern": "**/.env*",
+      "action": "ask",
+      "description": "Environment files"
+    },
+    {
+      "tool": "edit",
+      "pattern": "**/.git/**",
+      "action": "ask",
+      "description": "Git internals"
+    },
+    {
+      "tool": "read",
+      "pattern": "**/.env*",
+      "action": "ask",
+      "description": "Environment files"
+    },
+    {
+      "tool": "bash",
+      "pattern": "grep",
+      "action": "allow"
+    },
+    {
+      "tool": "bash",
+      "pattern": "ls",
+      "action": "allow"
+    },
+    {
+      "tool": "bash",
+      "pattern": "find",
+      "action": "allow"
+    },
+    {
+      "tool": "bash",
+      "pattern": "head",
+      "action": "allow"
+    }
+  ],
+  "defaults": {
+    "bash": "ask"
+  },
+  "defaultAction": "allow"
+}
