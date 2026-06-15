@@ -10,6 +10,7 @@ Personal pi extensions, agents, and tools.
 | `pi-web-access` | Web search (Exa MCP) and content extraction |
 | `pi-subagent` | Subagent delegation system with agent discovery |
 | `scopy` | Select & copy messages from conversation |
+| `auto-memory` | `/save-memories` — extract corrections from session, persist to `.agents/memory.md`, auto-inject at session start |
 | `git-checkpoint` | Git stash checkpoints with undo/redo |
 | `permissions` | Permission gates for tool calls (bash, write, etc.) |
 
@@ -72,6 +73,7 @@ npm run check
 │   ├── scopy.ts          # Select & copy messages
 │   ├── git-checkpoint.ts # Git stash checkpoints
 │   └── permissions/      # Permission gates
+│   ├── auto-memory.ts    # /save-memories — persistent agent memory
 │   ├── rg-fd.ts          # rg/fd as named tools
 ├── agents/               # Subagent agent definitions
 ├── config/               # Example runtime config files
