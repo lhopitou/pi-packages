@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "Personal pi extensions, agents, and tools",
   "type": "module",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "private": true,
   "scripts": {
     "clean": "rm -rf extensions/pi-web-access/node_modules",
@@ -33,7 +35,8 @@
       "./extensions/git-checkpoint.ts",
       "./extensions/permissions/index.ts",
       "./extensions/rg-fd.ts",
-      "./extensions/get-system-prompt.ts"
+      "./extensions/get-system-prompt.ts",
+      "./extensions/auto-memory.ts"
     ],
     "skills": [
       "./skills"
