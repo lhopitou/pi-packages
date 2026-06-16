@@ -30,5 +30,5 @@
     }
   },
   "include": ["extensions/**/*.ts"],
-  "exclude": ["node_modules", "extensions/pi-web-access/node_modules"]
+  "exclude": ["node_modules", "extensions/pi-web-access/node_modules", "extensions/pi-om/node_modules"]
 }

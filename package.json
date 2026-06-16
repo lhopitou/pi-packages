@@ -9,7 +9,8 @@
   "private": true,
   "scripts": {
     "clean": "rm -rf extensions/pi-web-access/node_modules",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "node --test extensions/pi-om/src/**/*.test.ts"
   },
   "dependencies": {
     "p-limit": "^6.1.0",
@@ -36,7 +37,8 @@
       "./extensions/permissions/index.ts",
       "./extensions/rg-fd.ts",
       "./extensions/get-system-prompt.ts",
-      "./extensions/auto-memory.ts"
+      "./extensions/auto-memory.ts",
+      "./extensions/pi-om/index.ts"
     ],
     "skills": [
       "./skills"
