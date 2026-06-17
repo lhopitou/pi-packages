@@ -77,7 +77,7 @@ function loadAgentsFromDir(
         return raw
           .split(",")
           .map((t: string) => t.trim())
-          .filter((t: string): t is string => allTools.includes(t));
+          .filter((t: string) => t.length > 0);
       }
       return [...allTools];
     })();

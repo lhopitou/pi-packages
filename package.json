@@ -38,6 +38,7 @@
       "./extensions/rg-fd.ts",
       "./extensions/get-system-prompt.ts",
       "./extensions/auto-memory.ts",
+      "./extensions/edit-indent-normalizer.ts",
       "./extensions/pi-om/index.ts"
     ],
     "skills": [

@@ -1,15 +1,20 @@
 /**
  * runner.ts — Child process spawn, event streaming, abort, and result collection.
+ *
+ * Refactored to share CLI argument building between foreground (runSubagent)
+ * and background (spawnBackgroundAgent) execution modes.
  */
 
-import { existsSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, unlinkSync, writeFileSync, mkdirSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import type { AgentDefinition } from "./agents.ts";
 import type { SubagentConfig } from "./config.ts";
 import { resolvePermissionExtensionPath } from "./permissions.ts";
+import { getAsyncRunDir, registerJob } from "./async-tracker.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -66,6 +71,11 @@ export interface SubagentResult {
   error?: string;
 }
 
+export interface BackgroundSpawnResult {
+  id: string;
+  pid: number;
+}
+
 export type EventCallback = (event: SubagentEvent) => void;
 
 export interface RunOptions {
@@ -119,10 +129,9 @@ function emptyMetadata(): SubagentMetadata {
   };
 }
 
-// ── Process invocation ───────────────────────────────────────────────
+// ── PID / command resolution ─────────────────────────────────────────
 
 function getPiCommand(): { command: string; args: string[] } {
-  // Try to use the same runtime that loaded pi
   const currentScript = process.argv[1];
   if (currentScript && existsSync(currentScript)) {
     return { command: process.execPath, args: [currentScript] };
@@ -148,25 +157,35 @@ async function writePromptToTempFile(
   return { dir: tmpDir, filePath };
 }
 
-// ── Main runner ──────────────────────────────────────────────────────
+// ── Path to the status-reporter companion extension ──────────────────
 
-export async function runSubagent(options: RunOptions): Promise<SubagentResult> {
-  const { agent, task, cwd, config, signal, onEvent, retryHint } = options;
-  const startedAt = Date.now();
-  const metadata = emptyMetadata();
-  const messages: unknown[] = [];
-  let lastAssistantText = "";
-  let timedOut = false;
-  let aborted = false;
-  let exitCode = 0;
-  let stderrText = "";
+function resolveStatusReporterPath(): string {
+  // This file lives at extensions/pi-subagent/runner.ts
+  // The status-reporter lives alongside it
+  const thisDir = dirname(fileURLToPath(import.meta.url));
+  return join(thisDir, "status-reporter.ts");
+}
 
-  // Build Pi invocation arguments
+// ── Shared arg builder ───────────────────────────────────────────────
+
+interface ArgBuildResult {
+  args: string[];
+  tmpPromptDir?: string;
+  tmpPromptPath?: string;
+  tmpContextDir?: string;
+  tmpContextPath?: string;
+}
+
+async function buildSubagentArgs(
+  options: RunOptions,
+  extraExtensions?: string[],
+): Promise<ArgBuildResult> {
+  const { agent, task, config, retryHint } = options;
+
   const piBase = getPiCommand();
   const args: string[] = [
     ...piBase.args,
-    "--mode",
-    "json",
+    "--mode", "json",
     "--no-session",
     "--no-prompt-templates",
     "--no-context-files",
@@ -177,14 +196,14 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
     args.push("--tools", agent.tools.join(","));
   }
 
-  // Skills: only pass the agent's specific skills
+  // Skills
   if (agent.skills.length > 0) {
     args.push("--skills", agent.skills.join(","));
   } else {
     args.push("--no-skills");
   }
 
-  // Model: agent-defined > parent model > Pi session default
+  // Model
   if (agent.model) {
     args.push("--model", agent.model);
   } else if (options.parentModel) {
@@ -196,11 +215,10 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
     args.push("--thinking", agent.thinking);
   }
 
-  // Prevent auto-discovery of ALL extensions (including pi-subagent itself).
-  // Only load explicitly requested extensions.
+  // Prevent auto-discovery of extensions
   args.push("--no-extensions");
 
-  // Permission extension — always load via -e since we disabled auto-discovery
+  // Permission extension
   const permExtPath = resolvePermissionExtensionPath(config);
   if (permExtPath) {
     args.push("-e", permExtPath);
@@ -209,6 +227,13 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
   // Agent extensions
   for (const extPath of agent.extensions) {
     args.push("-e", extPath);
+  }
+
+  // Extra extensions (e.g., status reporter for background agents)
+  if (extraExtensions) {
+    for (const extPath of extraExtensions) {
+      args.push("-e", extPath);
+    }
   }
 
   // System prompt
@@ -226,7 +251,7 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
     args.push("--append-system-prompt", tmpPromptPath);
   }
 
-  // Inherit context — written with mode 0o600 to prevent local disclosure
+  // Inherit context
   let tmpContextDir: string | undefined;
   let tmpContextPath: string | undefined;
   if (options.parentConversation && agent.inheritContext) {
@@ -240,6 +265,26 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
 
   // Task as the final prompt argument
   args.push(effectivePrompt);
+
+  return { args, tmpPromptDir, tmpPromptPath, tmpContextDir, tmpContextPath };
+}
+
+// ── Foreground runner ────────────────────────────────────────────────
+
+export async function runSubagent(options: RunOptions): Promise<SubagentResult> {
+  const { cwd, config, signal, onEvent } = options;
+  const startedAt = Date.now();
+  const metadata = emptyMetadata();
+  const messages: unknown[] = [];
+  let lastAssistantText = "";
+  let timedOut = false;
+  let aborted = false;
+  let exitCode = 0;
+  let stderrText = "";
+
+  const piBase = getPiCommand();
+  const { args, tmpPromptDir, tmpPromptPath, tmpContextDir, tmpContextPath } =
+    await buildSubagentArgs(options);
 
   // Timeout setup
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
@@ -269,7 +314,7 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
     if (!event || typeof event !== "object") return;
     const e = event as Record<string, unknown>;
 
-    // Emit typed event (skip streaming deltas — monitor only needs message_end)
+    // Emit typed event (skip streaming deltas)
     const typedEvent = e as unknown as SubagentEvent;
     if (typedEvent.type !== "message_update" && typedEvent.type !== "message_start") {
       onEvent?.(typedEvent);
@@ -300,10 +345,8 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
         }
         const text = extractAssistantText(msg);
         if (text) lastAssistantText = text;
-        if (msg.model && typeof msg.model === "string")
-          metadata.model = msg.model;
-        if (msg.stopReason && typeof msg.stopReason === "string")
-          metadata.stopReason = msg.stopReason;
+        if (msg.model && typeof msg.model === "string") metadata.model = msg.model;
+        if (msg.stopReason && typeof msg.stopReason === "string") metadata.stopReason = msg.stopReason;
       }
     }
   };
@@ -356,7 +399,6 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
   // Wait for child process to exit
   const exitPromise = new Promise<number>((resolve) => {
     proc.on("close", (code) => {
-      // Flush remaining stdout
       if (stdoutBuffer.trim()) processLine(stdoutBuffer);
       resolve(code ?? 0);
     });
@@ -376,7 +418,7 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
     signal.removeEventListener("abort", abortListener);
   }
 
-  // Clean temp files and directories (use rmSync for directories)
+  // Clean temp files
   if (tmpPromptPath) {
     try { unlinkSync(tmpPromptPath); } catch {}
   }
@@ -392,40 +434,28 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
 
   metadata.durationMs = Date.now() - startedAt;
 
-  // Build result — check aborted/timedOut first, then extract exit code
   if (aborted) {
     return {
-      success: false,
-      text: "",
-      metadata,
-      aborted: true,
-      timedOut: false,
+      success: false, text: "", metadata,
+      aborted: true, timedOut: false,
       error: "Subagent was aborted by user",
     };
   }
 
   if (timedOut) {
     return {
-      success: false,
-      text: "",
-      metadata,
-      aborted: false,
-      timedOut: true,
+      success: false, text: "", metadata,
+      aborted: false, timedOut: true,
       error: `Subagent timed out after ${Math.round(config.timeoutMs / 60000)} minutes`,
     };
   }
 
-  if (raceResult.type === "exit") {
-    exitCode = raceResult.code;
-  }
+  if (raceResult.type === "exit") exitCode = raceResult.code;
 
   if (exitCode !== 0) {
     return {
-      success: false,
-      text: "",
-      metadata,
-      aborted: false,
-      timedOut: false,
+      success: false, text: "", metadata,
+      aborted: false, timedOut: false,
       error: `Subagent process exited with code ${exitCode}${stderrText ? `: ${stderrText.trim().slice(0, 500)}` : ""}`,
     };
   }
@@ -437,6 +467,85 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
     aborted: false,
     timedOut: false,
   };
+}
+
+// ── Background spawner ───────────────────────────────────────────────
+
+export async function spawnBackgroundAgent(
+  options: RunOptions & { runId: string },
+): Promise<BackgroundSpawnResult> {
+  const { config, runId } = options;
+  const asyncDir = getAsyncRunDir(runId);
+
+  // Create the async run directory
+  try { mkdirSync(asyncDir, { recursive: true }); } catch {}
+
+  // Session file path for the child process
+  const sessionDir = join(asyncDir, "sessions");
+  try { mkdirSync(sessionDir, { recursive: true }); } catch {}
+  const sessionFile = join(sessionDir, "session.jsonl");
+
+  // Build arguments using shared builder, plus the status reporter extension
+  const statusReporterPath = resolveStatusReporterPath();
+  const { args, tmpPromptDir, tmpPromptPath, tmpContextDir, tmpContextPath } =
+    await buildSubagentArgs(options, [statusReporterPath]);
+
+  // Replace --no-session with --session so the child saves its session file
+  const noSessionIdx = args.indexOf("--no-session");
+  if (noSessionIdx !== -1) {
+    args.splice(noSessionIdx, 1, "--session", sessionFile);
+  }
+
+  const piBase = getPiCommand();
+
+  // Spawn detached
+  const proc = spawn(piBase.command, args, {
+    cwd: options.cwd,
+    shell: false,
+    stdio: "ignore",  // Detached: parent doesn't read stdout/stderr
+    detached: true,
+    env: {
+      ...process.env,
+      PI_SUBAGENT_CHILD: "1",
+      PI_SUBAGENT_STATUS_DIR: asyncDir,
+      PI_SUBAGENT_AGENT_NAME: options.agent.name,
+      PI_SUBAGENT_TASK: options.task,
+      PI_SUBAGENT_SESSION_FILE: sessionFile,
+    },
+  });
+
+  // Unref so the parent can exit without waiting for the child
+  proc.unref();
+
+  const pid = proc.pid ?? 0;
+
+  // Register the job in the async tracker
+  registerJob(
+    runId,
+    options.agent.name,
+    options.task,
+    pid,
+    sessionFile,
+  );
+
+  // Clean up temp files (the child has already read them at process start)
+  // Delay cleanup slightly to ensure the child had time to fork
+  setTimeout(() => {
+    if (tmpPromptPath) {
+      try { unlinkSync(tmpPromptPath); } catch {}
+    }
+    if (tmpPromptDir) {
+      try { rmSync(tmpPromptDir, { recursive: true, force: true }); } catch {}
+    }
+    if (tmpContextPath) {
+      try { unlinkSync(tmpContextPath); } catch {}
+    }
+    if (tmpContextDir) {
+      try { rmSync(tmpContextDir, { recursive: true, force: true }); } catch {}
+    }
+  }, 2000);
+
+  return { id: runId, pid };
 }
 
 // ── Format helpers for UI ────────────────────────────────────────────

@@ -112,3 +112,27 @@ List all available subagent types with full delegation rules, tool lists, and mo
 ## Commands
 
 - `/subagents` — list agents and current configuration
+- `/subagent-stats` — view cumulative per-agent usage stats (tokens, cost, duration). Use `/subagent-stats clear` to reset.
+- `/subagent-view` — open scrollable overlay to inspect a subagent's conversation
+
+## Stats & Footer
+
+After each subagent run, the extension:
+
+1. **Records** the run (agent name, token usage, cost, duration, turns, tool calls) to `~/.pi/agent/subagent-stats.jsonl`
+2. **Updates the footer** via `ctx.ui.setStatus("subagent", ...)` — shows aggregate totals like `3 runs · ↑12k ↓2k $0.042`
+3. **Provides `/subagent-stats`** for a detailed per-agent breakdown
+
+Example `/subagent-stats` output:
+
+```
+Subagent Usage Stats
+
+  Total: 5 runs (4 ✓, 1 ✗) · ↑52k ↓8k R31k CH60% · $0.342 · 3m12s
+
+  explore: 3 runs · 7t · 12 tools · ↑28k ↓4k CH57% · $0.186 · 2m4s
+  reviewer: 1 run · 2t · 4 tools · ↑14k ↓2k CH71% · $0.098 · 48.2s
+  worker: 1 run · 0t · 0 tools · ↑10k ↓0 · $0.058 · 2.1s · 1 ✗
+```
+
+The footer status line appears in Pi's built-in footer on the extensions row. Stats persist across `/reload` within the same Pi process. Use `/subagent-stats clear` to reset.
