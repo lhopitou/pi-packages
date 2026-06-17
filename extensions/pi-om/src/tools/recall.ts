@@ -12,7 +12,7 @@ import { renderRecallSourceEntries, renderRecallSourceEntry } from "../serialize
 
 export const RECALL_OBSERVATION_TOOL_NAME = "recall";
 
-const MEMORY_ID_PATTERN = /^[a-f0-9]{12}$/;
+const MEMORY_ID_PATTERN = /^[a-f0-9]{16}$/;
 
 type RecallObservationToolDetails = {
 	status: "ok" | "partial" | "invalid_id" | "not_found" | "no_source" | "source_unavailable";
@@ -60,7 +60,7 @@ function renderObservationOnlyTextFromResult(result: Extract<RecallResult, { sta
 function renderMemoryText(result: Extract<RecallResult, { status: "found" }>): string {
 	const sections: string[] = [];
 	if (result.collision) sections.push(`Memory id ${result.memoryId} matched multiple items.`);
-	if (result.reflections.length > 0) sections.push(`Reflections:\n${result.reflections.map((m) => `[${m.reflection.id}] ${m.reflection.content}`).join("\n")}`);
+	if (result.reflections.length > 0) sections.push(`Reflections:\n${result.reflections.map((m) => `[${m.reflection.id}]${m.status === "superseded" ? " [superseded]" : ""} ${m.reflection.content}`).join("\n")}`);
 	if (result.observations.length > 0) sections.push(`Observations:\n${result.observations.map((m) => `[${m.observation.id}]${m.status === "dropped" ? " [dropped]" : ""} ${m.observation.timestamp} [${m.observation.relevance}] ${m.observation.content}`).join("\n")}`);
 	const sourceText = renderRecallSourceEntries(result.sourceEntries);
 	if (sourceText.trim()) sections.push(`Sources:\n${sourceText}`);
@@ -77,13 +77,13 @@ export const recallObservationTool = defineTool({
 	promptGuidelines: [
 		"Use recall before making an important decision that depends on a compacted observation or reflection whose details are unclear.",
 		"Use recall when you need exact wording, rationale, file paths, commands, errors, commits, user constraints, or provenance behind a remembered claim.",
-		"Do not use recall as semantic search or transcript browsing; you must already have a specific 12-character memory id.",
+		"Do not use recall as semantic search or transcript browsing; you must already have a specific 16-character memory id.",
 		"Do not recall every id preemptively. Recall only when exact source context will materially improve the next action.",
 	],
 	parameters: Type.Object({
 		id: Type.String({
-			pattern: "^[a-f0-9]{12}$",
-			description: "12-character lowercase hex observation or reflection id shown in compacted memory.",
+			pattern: "^[a-f0-9]{16}$",
+			description: "16-character lowercase hex observation or reflection id shown in compacted memory.",
 		}),
 	}),
 	renderCall(args) {
@@ -96,7 +96,7 @@ export const recallObservationTool = defineTool({
 	async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 		const memoryId = params.id;
 		if (!MEMORY_ID_PATTERN.test(memoryId)) {
-			const message = `Memory id must be 12 lowercase hex characters. Received: ${memoryId}`;
+			const message = `Memory id must be 16 lowercase hex characters. Received: ${memoryId}`;
 			return textResult(message, emptyDetails("invalid_id", memoryId, message));
 		}
 		const branchEntries = ctx.sessionManager.getBranch() as Entry[];

@@ -4,6 +4,7 @@ import {
 	isObservationsDroppedEntry,
 	isObservationsRecordedEntry,
 	isReflectionsRecordedEntry,
+	isReflectionsSupersededEntry,
 	type Entry,
 	type MemoryDetails,
 	type Observation,
@@ -39,6 +40,7 @@ type ProjectionFoldOptions = {
 	observationsBoundary: ProjectionBoundary;
 	reflectionsBoundary: ProjectionBoundary;
 	dropsBoundary: ProjectionBoundary;
+	supersedeBoundary: ProjectionBoundary;
 };
 
 function entryIndexById(entries: Entry[]): Map<string, number> {
@@ -86,11 +88,13 @@ function foldProjection(entries: Entry[], options: ProjectionFoldOptions): Proje
 	const observationsBoundary = boundaryIndex(entries, indexes, options.observationsBoundary);
 	const reflectionsBoundary = boundaryIndex(entries, indexes, options.reflectionsBoundary);
 	const dropsBoundary = boundaryIndex(entries, indexes, options.dropsBoundary);
+	const supersedeBoundary = boundaryIndex(entries, indexes, options.supersedeBoundary);
 	const observations: Observation[] = [];
 	const reflections: Reflection[] = [];
 	const observationsById = new Set<string>();
 	const reflectionsById = new Set<string>();
 	const droppedObservationIds = new Set<string>();
+	const supersededReflectionIds = new Set<string>();
 
 	for (const entry of entries) {
 		if (isObservationsRecordedEntry(entry) && isCoveredAtOrBefore(entry, indexes, observationsBoundary)) {
@@ -113,12 +117,17 @@ function foldProjection(entries: Entry[], options: ProjectionFoldOptions): Proje
 
 		if (isObservationsDroppedEntry(entry) && isCoveredAtOrBefore(entry, indexes, dropsBoundary)) {
 			for (const observationId of entry.data.observationIds) droppedObservationIds.add(observationId);
+			continue;
+		}
+
+		if (isReflectionsSupersededEntry(entry) && isCoveredAtOrBefore(entry, indexes, supersedeBoundary)) {
+			for (const reflectionId of entry.data.reflectionIds) supersededReflectionIds.add(reflectionId);
 		}
 	}
 
 	return {
 		observations: observations.filter((observation) => !droppedObservationIds.has(observation.id)),
-		reflections,
+		reflections: reflections.filter((reflection) => !supersededReflectionIds.has(reflection.id)),
 	};
 }
 
@@ -144,6 +153,7 @@ export function fullProjection(entries: Entry[], upToEntryId?: string): Projecti
 		observationsBoundary: boundary,
 		reflectionsBoundary: boundary,
 		dropsBoundary: boundary,
+		supersedeBoundary: boundary,
 	});
 }
 
@@ -176,11 +186,18 @@ export function buildCompactionProjection(
 	config: CompactionProjectionConfig,
 ): CompactionProjection {
 	const fullFoldBoundaryId = latestFullFoldBoundaryId(entries);
-	const maintenanceBoundary = fullFoldBoundaryId ? entryBoundary(fullFoldBoundaryId) : noneBoundary();
+	// When no previous full-fold compaction exists, reflections and drops must use
+	// the same boundary as observations (firstKeptEntryId). noneBoundary() would
+	// exclude all reflections/drops because boundaryIndex returns -1, and
+	// isAtOrBefore(any, -1) is always false.
+	const maintenanceBoundary = fullFoldBoundaryId
+		? entryBoundary(fullFoldBoundaryId)
+		: entryBoundary(firstKeptEntryId);
 	const normalProjection = foldProjection(entries, {
 		observationsBoundary: entryBoundary(firstKeptEntryId),
 		reflectionsBoundary: maintenanceBoundary,
 		dropsBoundary: maintenanceBoundary,
+		supersedeBoundary: maintenanceBoundary,
 	});
 	const observationTokens = normalProjection.observations.reduce(
 		(total, observation) => total + observation.tokenCount,

@@ -10,9 +10,11 @@ import {
 	OM_OBSERVATIONS_DROPPED,
 	OM_OBSERVATIONS_RECORDED,
 	OM_REFLECTIONS_RECORDED,
+	OM_REFLECTIONS_SUPERSEDED,
 	buildObservationsDroppedData,
 	buildObservationsRecordedData,
 	buildReflectionsRecordedData,
+	buildReflectionsSupersededData,
 	earlierCoverageMarkerId,
 	foldLedger,
 	fullProjection,
@@ -252,24 +254,31 @@ async function runReflectorStage(
 	if (!resolved) return { outcome: "abort", sameRunReflections: [] };
 
 	const folded = foldLedger(entries);
-	const reflections = await runReflector({
+	const result = await runReflector({
 		model: resolved.model as any,
 		apiKey: resolved.apiKey,
 		headers: resolved.headers,
-		reflections: folded.reflections,
+		reflections: folded.activeReflections,
 		observations: folded.activeObservations,
 		maxTurns: runtime.config.agentMaxTurns,
 		thinkingLevel: runtime.config.model?.thinking ?? "low",
 	});
-	if (!reflections) return { outcome: "continue", sameRunReflections: [] };
+	if (!result) return { outcome: "continue", sameRunReflections: [] };
 
-	const data = buildReflectionsRecordedData(reflections, observationCoverageId);
-	if (!data) return { outcome: "continue", sameRunReflections: [] };
-	appendEntry(pi, OM_REFLECTIONS_RECORDED, data);
+	if (result.reflections.length > 0) {
+		const data = buildReflectionsRecordedData(result.reflections, observationCoverageId);
+		if (data) appendEntry(pi, OM_REFLECTIONS_RECORDED, data);
+	}
+
+	if (result.supersededIds.length > 0) {
+		const supersededData = buildReflectionsSupersededData(result.supersededIds, observationCoverageId);
+		if (supersededData) appendEntry(pi, OM_REFLECTIONS_SUPERSEDED, supersededData);
+	}
+
 	return {
 		outcome: "continue",
-		sameRunReflections: reflections,
-		effectiveReflectionCoverageId: data.coversUpToId,
+		sameRunReflections: result.reflections,
+		effectiveReflectionCoverageId: observationCoverageId,
 	};
 }
 
@@ -298,7 +307,7 @@ async function runDropperStage(
 	const resolved = await resolveModel("dropper");
 	if (!resolved) return "abort";
 
-	const reflectionsForDropper = mergeReflections(folded.reflections, sameRunReflections);
+	const reflectionsForDropper = mergeReflections(folded.activeReflections, sameRunReflections);
 	const droppedIds = await runDropper({
 		model: resolved.model as any,
 		apiKey: resolved.apiKey,

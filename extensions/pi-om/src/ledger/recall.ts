@@ -2,6 +2,7 @@ import {
 	isObservationsDroppedEntry,
 	isObservationsRecordedEntry,
 	isReflectionsRecordedEntry,
+	isReflectionsSupersededEntry,
 	type Entry,
 	type Observation,
 	type Reflection,
@@ -38,6 +39,7 @@ export type RecalledReflection = {
 	reflection: Reflection;
 	reflectionEntryId: string;
 	reflectionRecordIndex: number;
+	status: "active" | "superseded";
 };
 
 export type RecallResult =
@@ -94,10 +96,12 @@ function indexLedger(entries: Entry[]): {
 	observations: IndexedObservation[];
 	reflections: IndexedReflection[];
 	droppedIds: Set<string>;
+	supersededIds: Set<string>;
 } {
 	const observations: IndexedObservation[] = [];
 	const reflections: IndexedReflection[] = [];
 	const droppedIds = new Set<string>();
+	const supersededIds = new Set<string>();
 
 	for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
 		const entry = entries[entryIndex];
@@ -115,10 +119,14 @@ function indexLedger(entries: Entry[]): {
 		}
 		if (isObservationsDroppedEntry(entry)) {
 			entry.data.observationIds.forEach((id) => droppedIds.add(id));
+			continue;
+		}
+		if (isReflectionsSupersededEntry(entry)) {
+			entry.data.reflectionIds.forEach((id) => supersededIds.add(id));
 		}
 	}
 
-	return { observations, reflections, droppedIds };
+	return { observations, reflections, droppedIds, supersededIds };
 }
 
 function resolveObservationSources(entries: Entry[], observation: Observation, location: ObservationLedgerLocation): RecalledObservation {
@@ -170,7 +178,7 @@ function notFound(memoryId: string): RecallResult {
 }
 
 export function recallMemorySources(entries: Entry[], memoryId: string): RecallResult {
-	const { observations: indexedObservations, reflections: indexedReflections, droppedIds } = indexLedger(entries);
+	const { observations: indexedObservations, reflections: indexedReflections, droppedIds, supersededIds } = indexLedger(entries);
 	const directObservationMatches = indexedObservations.filter(({ observation }) => observation.id === memoryId);
 	const reflectionMatches = indexedReflections.filter(({ reflection }) => reflection.id === memoryId);
 
@@ -210,6 +218,7 @@ export function recallMemorySources(entries: Entry[], memoryId: string): RecallR
 		reflection,
 		reflectionEntryId: entryId,
 		reflectionRecordIndex: recordIndex,
+		status: supersededIds.has(reflection.id) ? "superseded" : "active",
 	}));
 	const sourceEntries = uniqueById(recalledObservations.flatMap((match) => match.sourceEntries));
 	const missingSourceEntryIds = uniqueStrings(recalledObservations.flatMap((match) => match.missingSourceEntryIds));

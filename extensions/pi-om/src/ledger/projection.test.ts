@@ -57,6 +57,10 @@ function makeObservationsDroppedEntry(observationIds: string[], coversUpToId: st
 	return makeEntry("custom", id, { customType: OM_OBSERVATIONS_DROPPED, data: { observationIds, coversUpToId } });
 }
 
+function makeReflectionsSupersededEntry(reflectionIds: string[], coversUpToId: string, id: string): Entry {
+	return makeEntry("custom", id, { customType: "om.reflections.superseded", data: { reflectionIds, coversUpToId } });
+}
+
 function makeCompactionEntry(firstKeptEntryId: string, details: Record<string, unknown>, id: string): Entry {
 	return makeEntry("compaction", id, { firstKeptEntryId, details });
 }
@@ -132,6 +136,20 @@ describe("fullProjection", () => {
 		assert.equal(proj.observations.length, 1);
 		assert.equal(proj.observations[0].id, "aaa1111111111111");
 	});
+
+	it("filters superseded reflections", () => {
+		const ref1 = makeReflection({ id: "fee1111111111111" });
+		const ref2 = makeReflection({ id: "fee2222222222222" });
+		const entries = [
+			makeSourceEntry("src1"),
+			makeReflectionsRecordedEntry([ref1], "src1", "ref-e1"),
+			makeReflectionsRecordedEntry([ref2], "src1", "ref-e2"),
+			makeReflectionsSupersededEntry(["fee1111111111111"], "src1", "sup-e1"),
+		];
+		const proj = fullProjection(entries);
+		assert.equal(proj.reflections.length, 1);
+		assert.equal(proj.reflections[0].id, "fee2222222222222");
+	});
 });
 
 // ── visibleProjection ──
@@ -188,8 +206,61 @@ describe("buildCompactionProjection", () => {
 		const proj = buildCompactionProjection(entries, "src1", { observationsPoolMaxTokens: 200 });
 		assert.equal(proj.fullFold, false);
 		assert.equal(proj.observations.length, 1);
-		// Note: reflections are only included from prior full folds in normal projection;
-		// without a prior compaction, reflectionsBoundary is 'none'
+	});
+
+	it("includes reflections on first compaction (no prior full fold)", () => {
+		const obs1 = makeObservation({ id: "aaa1111111111111", tokenCount: 100 });
+		const ref1 = makeReflection({ id: "fee1111111111111" });
+		const entries = [
+			makeSourceEntry("src1"),
+			makeObservationsRecordedEntry([obs1], "src1", "obs-e1"),
+			makeReflectionsRecordedEntry([ref1], "src1", "ref-e1"),
+		];
+		const proj = buildCompactionProjection(entries, "src1", { observationsPoolMaxTokens: 200 });
+		assert.equal(proj.fullFold, false);
+		assert.equal(proj.observations.length, 1);
+		assert.equal(proj.reflections.length, 1);
+	});
+
+	it("includes drops on first compaction (no prior full fold)", () => {
+		const obs1 = makeObservation({ id: "aaa1111111111111", tokenCount: 100 });
+		const obs2 = makeObservation({ id: "bbb2222222222222", tokenCount: 100 });
+		const entries = [
+			makeSourceEntry("src1"),
+			makeObservationsRecordedEntry([obs1, obs2], "src1", "obs-e1"),
+			makeObservationsDroppedEntry(["aaa1111111111111"], "src1", "drop-e1"),
+		];
+		const proj = buildCompactionProjection(entries, "src1", { observationsPoolMaxTokens: 200 });
+		assert.equal(proj.fullFold, false);
+		assert.equal(proj.observations.length, 1);
+		assert.equal(proj.observations[0].id, "bbb2222222222222");
+	});
+
+	it("uses maintenance boundary for reflections after prior full fold", () => {
+		const obs1 = makeObservation({ id: "aaa1111111111111", tokenCount: 100 });
+		const ref1 = makeReflection({ id: "fee1111111111111" });
+		const ref2 = makeReflection({ id: "fee2222222222222" });
+		// First compaction was a full fold at src1
+		const entries = [
+			makeSourceEntry("src1"),
+			makeSourceEntry("src2"),
+			makeObservationsRecordedEntry([obs1], "src1", "obs-e1"),
+			makeReflectionsRecordedEntry([ref1], "src1", "ref-e1"),
+			makeCompactionEntry("src1", {
+				type: OM_FOLDED,
+				version: 1,
+				fullFold: true,
+				observations: [obs1],
+				reflections: [ref1],
+			}, "comp1"),
+			makeReflectionsRecordedEntry([ref2], "src2", "ref-e2"),
+		];
+		const proj = buildCompactionProjection(entries, "src2", { observationsPoolMaxTokens: 200 });
+		assert.equal(proj.fullFold, false);
+		// Maintenance boundary at src1 includes ref1 (coversUpToId src1 ≤ src1 boundary)
+		// but excludes ref2 (coversUpToId src2 > src1 boundary)
+		assert.equal(proj.reflections.length, 1);
+		assert.equal(proj.reflections[0].id, "fee1111111111111");
 	});
 
 	it("returns full fold projection when observation tokens exceed pool max", () => {
@@ -206,6 +277,23 @@ describe("buildCompactionProjection", () => {
 		assert.equal(proj.reflections.length, 1);
 	});
 
+	it("full fold includes all reflections even on first compaction", () => {
+		const obs1 = makeObservation({ id: "aaa1111111111111", tokenCount: 500 });
+		const ref1 = makeReflection({ id: "fee1111111111111" });
+		const ref2 = makeReflection({ id: "fee2222222222222" });
+		const entries = [
+			makeSourceEntry("src1"),
+			makeSourceEntry("src2"),
+			makeObservationsRecordedEntry([obs1], "src1", "obs-e1"),
+			makeReflectionsRecordedEntry([ref1], "src1", "ref-e1"),
+			makeReflectionsRecordedEntry([ref2], "src2", "ref-e2"),
+		];
+		const proj = buildCompactionProjection(entries, "src2", { observationsPoolMaxTokens: 100 });
+		assert.equal(proj.fullFold, true);
+		assert.equal(proj.observations.length, 1);
+		assert.equal(proj.reflections.length, 2);
+	});
+
 	it("includes MemoryDetails in result", () => {
 		const obs1 = makeObservation({ id: "aaa1111111111111", tokenCount: 100 });
 		const entries = [
@@ -215,6 +303,22 @@ describe("buildCompactionProjection", () => {
 		const proj = buildCompactionProjection(entries, "src1", { observationsPoolMaxTokens: 200 });
 		assert.equal(proj.details.type, OM_FOLDED);
 		assert.equal(proj.details.version, 1);
+	});
+
+	it("excludes superseded reflections from projection", () => {
+		const obs1 = makeObservation({ id: "aaa1111111111111", tokenCount: 100 });
+		const ref1 = makeReflection({ id: "fee1111111111111" });
+		const ref2 = makeReflection({ id: "fee2222222222222" });
+		const entries = [
+			makeSourceEntry("src1"),
+			makeObservationsRecordedEntry([obs1], "src1", "obs-e1"),
+			makeReflectionsRecordedEntry([ref1], "src1", "ref-e1"),
+			makeReflectionsRecordedEntry([ref2], "src1", "ref-e2"),
+			makeReflectionsSupersededEntry(["fee1111111111111"], "src1", "sup-e1"),
+		];
+		const proj = buildCompactionProjection(entries, "src1", { observationsPoolMaxTokens: 200 });
+		assert.equal(proj.reflections.length, 1);
+		assert.equal(proj.reflections[0].id, "fee2222222222222");
 	});
 });
 

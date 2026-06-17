@@ -6,17 +6,20 @@ import {
 	isObservationsRecordedData,
 	isReflectionsRecordedData,
 	isObservationsDroppedData,
+	isReflectionsSupersededData,
 	isMemoryDetails,
 	isMemoryId,
-	isRelevance,
-	isNonEmptyString,
-	isNonEmptyStringArray,
 	isObservationsRecordedEntry,
 	isReflectionsRecordedEntry,
 	isObservationsDroppedEntry,
+	isReflectionsSupersededEntry,
+	isRelevance,
+	isNonEmptyString,
+	isNonEmptyStringArray,
 	buildObservationsRecordedData,
 	buildReflectionsRecordedData,
 	buildObservationsDroppedData,
+	buildReflectionsSupersededData,
 	OM_OBSERVATIONS_RECORDED,
 	OM_REFLECTIONS_RECORDED,
 	OM_OBSERVATIONS_DROPPED,
@@ -336,7 +339,7 @@ describe("isReflectionsRecordedEntry", () => {
 	});
 });
 
-describe("isObservationsDroppedEntry", () => {
+	describe("isObservationsDroppedEntry", () => {
 	it("accepts valid entry", () => {
 		const entry: Entry = {
 			type: "custom",
@@ -345,6 +348,28 @@ describe("isObservationsDroppedEntry", () => {
 			data: { observationIds: ["a1b2c3d4e5f6a1b2"], coversUpToId: "src1" },
 		};
 		assert.equal(isObservationsDroppedEntry(entry), true);
+	});
+});
+
+describe("isReflectionsSupersededEntry", () => {
+	it("accepts valid entry", () => {
+		const entry: Entry = {
+			type: "custom",
+			id: "e1",
+			customType: "om.reflections.superseded",
+			data: { reflectionIds: ["fee1111111111111"], coversUpToId: "src1" },
+		};
+		assert.equal(isReflectionsSupersededEntry(entry), true);
+	});
+
+	it("rejects wrong customType", () => {
+		const entry: Entry = { type: "custom", id: "e1", customType: "wrong", data: { reflectionIds: ["fee1111111111111"], coversUpToId: "src1" } };
+		assert.equal(isReflectionsSupersededEntry(entry), false);
+	});
+
+	it("rejects invalid data", () => {
+		const entry: Entry = { type: "custom", id: "e1", customType: "om.reflections.superseded", data: {} };
+		assert.equal(isReflectionsSupersededEntry(entry), false);
 	});
 });
 
@@ -386,5 +411,34 @@ describe("buildObservationsDroppedData", () => {
 
 	it("returns undefined for empty ids", () => {
 		assert.equal(buildObservationsDroppedData([], "entry1"), undefined);
+	});
+});
+
+describe("buildReflectionsSupersededData", () => {
+	it("builds valid data", () => {
+		const data = buildReflectionsSupersededData(["fee1111111111111"], "entry1");
+		assert.deepEqual(data, { reflectionIds: ["fee1111111111111"], coversUpToId: "entry1" });
+	});
+
+	it("returns undefined for empty ids", () => {
+		assert.equal(buildReflectionsSupersededData([], "entry1"), undefined);
+	});
+
+	it("returns undefined for empty coversUpToId", () => {
+		assert.equal(buildReflectionsSupersededData(["fee1111111111111"], ""), undefined);
+	});
+});
+
+describe("isReflectionsSupersededData", () => {
+	it("accepts valid data", () => {
+		assert.equal(isReflectionsSupersededData({ reflectionIds: ["fee1111111111111"], coversUpToId: "src1" }), true);
+	});
+
+	it("rejects empty reflectionIds", () => {
+		assert.equal(isReflectionsSupersededData({ reflectionIds: [], coversUpToId: "src1" }), false);
+	});
+
+	it("rejects reflectionIds with empty strings", () => {
+		assert.equal(isReflectionsSupersededData({ reflectionIds: [""], coversUpToId: "src1" }), false);
 	});
 });

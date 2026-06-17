@@ -1,6 +1,7 @@
 export const OM_OBSERVATIONS_RECORDED = "om.observations.recorded";
 export const OM_REFLECTIONS_RECORDED = "om.reflections.recorded";
 export const OM_OBSERVATIONS_DROPPED = "om.observations.dropped";
+export const OM_REFLECTIONS_SUPERSEDED = "om.reflections.superseded";
 export const OM_FOLDED = "om.folded";
 
 
@@ -54,6 +55,11 @@ export type ObservationsDroppedEntryData = {
 	coversUpToId: string;
 };
 
+export type ReflectionsSupersededEntryData = {
+	reflectionIds: string[];
+	coversUpToId: string;
+};
+
 export type MemoryDetails = {
 	type: typeof OM_FOLDED;
 	version: 1;
@@ -67,7 +73,8 @@ export type MemoryDetails = {
 export type V3MemoryCustomType =
 	| typeof OM_OBSERVATIONS_RECORDED
 	| typeof OM_REFLECTIONS_RECORDED
-	| typeof OM_OBSERVATIONS_DROPPED;
+	| typeof OM_OBSERVATIONS_DROPPED
+	| typeof OM_REFLECTIONS_SUPERSEDED;
 
 export function isRelevance(value: unknown): value is Relevance {
 	return typeof value === "string" && (RELEVANCE_VALUES as readonly string[]).includes(value);
@@ -141,6 +148,11 @@ export function isObservationsDroppedData(value: unknown): value is Observations
 	return isNonEmptyStringArray(value.observationIds) && isNonEmptyString(value.coversUpToId);
 }
 
+export function isReflectionsSupersededData(value: unknown): value is ReflectionsSupersededEntryData {
+	if (!isPlainRecord(value)) return false;
+	return isNonEmptyStringArray(value.reflectionIds) && isNonEmptyString(value.coversUpToId);
+}
+
 export function isMemoryDetails(value: unknown): value is MemoryDetails {
 	if (!isPlainRecord(value)) return false;
 	return (
@@ -178,6 +190,14 @@ export function isObservationsDroppedEntry(entry: Entry): entry is Entry & {
 	return entry.type === "custom" && entry.customType === OM_OBSERVATIONS_DROPPED && isObservationsDroppedData(entry.data);
 }
 
+export function isReflectionsSupersededEntry(entry: Entry): entry is Entry & {
+	type: "custom";
+	customType: typeof OM_REFLECTIONS_SUPERSEDED;
+	data: ReflectionsSupersededEntryData;
+} {
+	return entry.type === "custom" && entry.customType === OM_REFLECTIONS_SUPERSEDED && isReflectionsSupersededData(entry.data);
+}
+
 
 
 export function buildObservationsRecordedData(
@@ -202,4 +222,12 @@ export function buildObservationsDroppedData(
 ): ObservationsDroppedEntryData | undefined {
 	if (observationIds.length === 0 || !isNonEmptyString(coversUpToId)) return undefined;
 	return { observationIds, coversUpToId };
+}
+
+export function buildReflectionsSupersededData(
+	reflectionIds: string[],
+	coversUpToId: string,
+): ReflectionsSupersededEntryData | undefined {
+	if (reflectionIds.length === 0 || !isNonEmptyString(coversUpToId)) return undefined;
+	return { reflectionIds, coversUpToId };
 }

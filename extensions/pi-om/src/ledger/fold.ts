@@ -2,9 +2,11 @@ import {
 	isObservationsDroppedData,
 	isObservationsRecordedData,
 	isReflectionsRecordedData,
+	isReflectionsSupersededData,
 	OM_OBSERVATIONS_DROPPED,
 	OM_OBSERVATIONS_RECORDED,
 	OM_REFLECTIONS_RECORDED,
+	OM_REFLECTIONS_SUPERSEDED,
 	type Entry,
 	type Observation,
 	type Reflection,
@@ -22,11 +24,15 @@ export type FoldedLedger = {
 	activeObservations: Observation[];
 	/** Tombstoned observation ids, including ids that may not have a corresponding folded observation. */
 	droppedObservationIds: Set<string>;
-	/** All first-valid reflection records encountered through the fold boundary. */
+	/** All first-valid reflection records encountered through the fold boundary, including superseded reflections. */
 	reflections: Reflection[];
+	/** Reflection records not tombstoned by a folded supersede entry. */
+	activeReflections: Reflection[];
+	/** Tombstoned reflection ids, including ids that may not have a corresponding folded reflection. */
+	supersededReflectionIds: Set<string>;
 	/** All first-valid observation records by id, including dropped observations. */
 	observationsById: Map<string, Observation>;
-	/** All first-valid reflection records by id. */
+	/** All first-valid reflection records by id, including superseded reflections. */
 	reflectionsById: Map<string, Reflection>;
 };
 
@@ -47,6 +53,7 @@ export function foldLedger(entries: Entry[], options: FoldLedgerOptions = {}): F
 	const observationsById = new Map<string, Observation>();
 	const reflectionsById = new Map<string, Reflection>();
 	const droppedObservationIds = new Set<string>();
+	const supersededReflectionIds = new Set<string>();
 	const endIdx = foldEndIndex(entries, options.upToEntryId);
 
 	for (let i = 0; i <= endIdx; i++) {
@@ -78,18 +85,29 @@ export function foldLedger(entries: Entry[], options: FoldLedgerOptions = {}): F
 			for (const observationId of entry.data.observationIds) {
 				droppedObservationIds.add(observationId);
 			}
+			continue;
+		}
+
+		if (isCustomEntry(entry, OM_REFLECTIONS_SUPERSEDED)) {
+			if (!isReflectionsSupersededData(entry.data)) continue;
+			for (const reflectionId of entry.data.reflectionIds) {
+				supersededReflectionIds.add(reflectionId);
+			}
 		}
 	}
 
 	const observations = Array.from(observationsById.values());
 	const activeObservations = observations.filter((observation) => !droppedObservationIds.has(observation.id));
 	const reflections = Array.from(reflectionsById.values());
+	const activeReflections = reflections.filter((reflection) => !supersededReflectionIds.has(reflection.id));
 
 	return {
 		observations,
 		activeObservations,
 		droppedObservationIds,
 		reflections,
+		activeReflections,
+		supersededReflectionIds,
 		observationsById,
 		reflectionsById,
 	};

@@ -5,6 +5,7 @@ import {
 	OM_OBSERVATIONS_RECORDED,
 	OM_REFLECTIONS_RECORDED,
 	OM_OBSERVATIONS_DROPPED,
+	OM_REFLECTIONS_SUPERSEDED,
 	type Entry,
 	type Observation,
 	type Reflection,
@@ -274,5 +275,91 @@ describe("foldLedger — mixed entries", () => {
 		assert.equal(result.activeObservations.length, 2);
 		assert.equal(result.reflections.length, 1);
 		assert.equal(result.droppedObservationIds.size, 1);
+	});
+});
+
+function makeReflectionsSupersededEntry(reflectionIds: string[], coversUpToId: string, id: string): Entry {
+	return makeEntry("custom", { id, customType: OM_REFLECTIONS_SUPERSEDED, data: { reflectionIds, coversUpToId } });
+}
+
+// ── superseded reflections ──
+
+describe("foldLedger — superseded reflections", () => {
+	it("marks reflections as superseded", () => {
+		const ref1 = makeReflection({ id: "fee1111111111111" });
+		const entries = [
+			makeReflectionsRecordedEntry([ref1], "src1"),
+			makeReflectionsSupersededEntry(["fee1111111111111"], "src1", "sup-e1"),
+		];
+		const result = foldLedger(entries);
+		assert.equal(result.reflections.length, 1);
+		assert.equal(result.activeReflections.length, 0);
+		assert.equal(result.supersededReflectionIds.size, 1);
+		assert.ok(result.supersededReflectionIds.has("fee1111111111111"));
+	});
+
+	it("tracks superseded id even when reflection not yet seen", () => {
+		const entries = [
+			makeReflectionsSupersededEntry(["fee1111111111111"], "src1", "sup-e1"),
+		];
+		const result = foldLedger(entries);
+		assert.equal(result.reflections.length, 0);
+		assert.equal(result.supersededReflectionIds.size, 1);
+	});
+
+	it("ignores invalid superseded data", () => {
+		const ref1 = makeReflection({ id: "fee1111111111111" });
+		const entries = [
+			makeReflectionsRecordedEntry([ref1], "src1"),
+			makeEntry("custom", "sup-e1", { customType: OM_REFLECTIONS_SUPERSEDED, data: { reflectionIds: [], coversUpToId: "src1" } }),
+		];
+		const result = foldLedger(entries);
+		assert.equal(result.activeReflections.length, 1);
+	});
+
+	it("supersede after reflection still removes from active", () => {
+		const ref1 = makeReflection({ id: "fee1111111111111" });
+		const entries = [
+			makeReflectionsRecordedEntry([ref1], "src1"),
+			makeReflectionsSupersededEntry(["fee1111111111111"], "src1", "sup-e1"),
+		];
+		const result = foldLedger(entries);
+		assert.equal(result.reflections.length, 1);
+		assert.equal(result.activeReflections.length, 0);
+	});
+
+	it("multiple supersede entries accumulate", () => {
+		const ref1 = makeReflection({ id: "fee1111111111111" });
+		const ref2 = makeReflection({ id: "fee2222222222222" });
+		const entries = [
+			makeReflectionsRecordedEntry([ref1], "src1"),
+			makeReflectionsRecordedEntry([ref2], "src1"),
+			makeReflectionsSupersededEntry(["fee1111111111111"], "src1", "sup-e1"),
+			makeReflectionsSupersededEntry(["fee2222222222222"], "src1", "sup-e2"),
+		];
+		const result = foldLedger(entries);
+		assert.equal(result.reflections.length, 2);
+		assert.equal(result.activeReflections.length, 0);
+		assert.equal(result.supersededReflectionIds.size, 2);
+	});
+
+	it("handles complete session lifecycle with superseded reflections", () => {
+		const obs1 = makeObservation({ id: "aaa1111111111111" });
+		const obs2 = makeObservation({ id: "bbb2222222222222" });
+		const ref1 = makeReflection({ id: "fee1111111111111" });
+		const ref2 = makeReflection({ id: "fee2222222222222" });
+		const entries = [
+			makeEntry("message", { id: "msg1" }),
+			makeObservationsRecordedEntry([obs1, obs2], "src1"),
+			makeReflectionsRecordedEntry([ref1], "src1"),
+			makeReflectionsSupersededEntry(["fee1111111111111"], "src1", "sup-e1"),
+			makeReflectionsRecordedEntry([ref2], "src2"),
+		];
+		const result = foldLedger(entries);
+		assert.equal(result.observations.length, 2);
+		assert.equal(result.activeObservations.length, 2);
+		assert.equal(result.reflections.length, 2);
+		assert.equal(result.activeReflections.length, 1);
+		assert.equal(result.activeReflections[0].id, "fee2222222222222");
 	});
 });

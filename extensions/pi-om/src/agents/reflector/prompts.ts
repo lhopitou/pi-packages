@@ -43,4 +43,11 @@ Reflection content rules:
 - No timestamp, no priority marker, no bracketed tags, no "key: value" fields, no JSON.
 - Lead with the fact or pattern; include the reason or mechanism when known.
 - Preserve user assertions exactly. Use the user's exact words when non-standard.
-- Preserve named identifiers, paths, commands, package names, error codes, dates, decisions, constraints, and rationale.`;
+- Preserve named identifiers, paths, commands, package names, error codes, dates, decisions, constraints, and rationale.
+
+Supersession:
+- When a new reflection contradicts or replaces an existing reflection, include the old reflection's id in supersededReflectionIds.
+- Supersession means the old reflection is no longer the best statement of the fact; the new reflection replaces it.
+- Do not supersede a reflection merely because the new one is more detailed — only when the old one is now wrong or misleading.
+- A reflection about a changed decision (e.g., "user switched from REST to GraphQL") should supersede the prior decision reflection.
+- When in doubt, do not supersede; both reflections can coexist.`;

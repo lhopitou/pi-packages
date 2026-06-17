@@ -41,6 +41,7 @@ const RecordReflectionsSchema = Type.Object({
 		Type.Object({
 			content: Type.String({ minLength: 1 }),
 			supportingObservationIds: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+			supersededReflectionIds: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { description: "Ids of existing reflections that this new reflection replaces or contradicts. Only include when the new reflection renders the old one obsolete." })),
 		}),
 		{ minItems: 1 },
 	),
@@ -84,7 +85,7 @@ function normalizeReflectionContent(content: string): string | undefined {
 	return normalized;
 }
 
-export async function runReflector(args: RunReflectorArgs): Promise<Reflection[] | undefined> {
+export async function runReflector(args: RunReflectorArgs): Promise<{ reflections: Reflection[]; supersededIds: string[] } | undefined> {
 	const { model, apiKey, headers, reflections, observations, signal } = args;
 	if (observations.length === 0) return undefined;
 
@@ -98,6 +99,7 @@ export async function runReflector(args: RunReflectorArgs): Promise<Reflection[]
 	const allowedObservationIds = observations.map((observation) => observation.id);
 	const existingReflectionIds = new Set(reflections.map((reflection) => reflection.id));
 	const accumulated = new Map<string, Reflection>();
+	const proposedSupersededIds = new Set<string>();
 
 	const recordReflections: AgentTool<typeof RecordReflectionsSchema> = {
 		name: "record_reflections",
@@ -130,6 +132,14 @@ export async function runReflector(args: RunReflectorArgs): Promise<Reflection[]
 					duplicates++; // same-run duplicate or collision
 				} else {
 					added++;
+					// Collect superseded reflection ids for this accepted reflection
+					if (proposal.supersededReflectionIds) {
+						for (const supersededId of proposal.supersededReflectionIds) {
+							if (existingReflectionIds.has(supersededId)) {
+								proposedSupersededIds.add(supersededId);
+							}
+						}
+					}
 				}
 			}
 			return {
@@ -164,11 +174,15 @@ export async function runReflector(args: RunReflectorArgs): Promise<Reflection[]
 	}
 	await stream.result();
 	const acceptedReflections = Array.from(accumulated.values());
+	const supersededIds = Array.from(proposedSupersededIds);
 	const afterCoverageById = reflectionCoverageMap(observations, [...reflections, ...acceptedReflections]);
 	debugLog("reflector.result", {
-		reason: acceptedReflections.length > 0 ? "accepted_nonempty" : "no_tool_call",
+		reason: (acceptedReflections.length > 0 || supersededIds.length > 0) ? "accepted_nonempty" : "no_tool_call",
 		acceptedReflectionCount: acceptedReflections.length,
+		supersededReflectionCount: supersededIds.length,
 		coverageTransitionsByRelevance: summarizeCoverageTransitionsByRelevance(observations, coverageById, afterCoverageById),
 	});
-	return acceptedReflections.length > 0 ? acceptedReflections : undefined;
+	return (acceptedReflections.length > 0 || supersededIds.length > 0)
+		? { reflections: acceptedReflections, supersededIds }
+		: undefined;
 }

@@ -41,7 +41,7 @@ export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime): void 
 			const lines = [
 				"── Memory ──",
 				`Observations: ${folded.observations.length} recorded / ${folded.droppedObservationIds.size} dropped / ${folded.activeObservations.length} active / ${visible.observations.length} visible${drift.observationsOnlyInFull.length > 0 ? ` +${drift.observationsOnlyInFull.length}` : ""}`,
-				`Reflections:  ${folded.reflections.length} recorded / ${visible.reflections.length} visible${drift.reflectionsOnlyInFull.length > 0 ? ` +${drift.reflectionsOnlyInFull.length}` : ""}`,
+				`Reflections:  ${folded.reflections.length} recorded / ${folded.supersededReflectionIds.size} superseded / ${folded.activeReflections.length} active / ${visible.reflections.length} visible${drift.reflectionsOnlyInFull.length > 0 ? ` +${drift.reflectionsOnlyInFull.length}` : ""}`,
 				"",
 				"── Activity ──",
 				`Next observation: ~${obsProgress.toLocaleString()} / ${runtime.config.observeAfterTokens.toLocaleString()} tokens (${pct(obsProgress, runtime.config.observeAfterTokens)}%)`,
