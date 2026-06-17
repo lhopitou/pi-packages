@@ -71,11 +71,6 @@ describe("renderSummary", () => {
 		assert.ok(summary.includes("[fee1111111111111]"));
 		assert.ok(summary.includes("[aaa1111111111111]"));
 	});
-
-	it("includes recall tool instructions", () => {
-		const summary = renderSummary([makeReflection()], [makeObservation()]);
-		assert.ok(summary.includes("recall tool"));
-	});
 });
 
 describe("renderHandoverSummary", () => {
@@ -127,7 +122,6 @@ describe("renderHandoverSummary", () => {
 		const summary = renderHandoverSummary([makeReflection()], [makeObservation()]);
 		assert.ok(summary.includes("handover document"));
 		assert.ok(summary.includes("Durable Facts"));
-		assert.ok(!summary.includes("recall tool"));
 	});
 
 	it("renders multiple reflections as bullet list", () => {
