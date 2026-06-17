@@ -2,15 +2,6 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { Runtime } from "../runtime.ts";
 import { buildCompactionProjection, renderSummary, type Entry } from "../ledger/index.ts";
 
-const DEFAULT_OBSERVATIONS_POOL_MAX_TOKENS = 20_000;
-
-function observationsPoolMaxTokens(runtime: Runtime): number {
-	const value = (runtime.config as { observationsPoolMaxTokens?: unknown }).observationsPoolMaxTokens;
-	return typeof value === "number" && Number.isFinite(value) && value > 0
-		? value
-		: DEFAULT_OBSERVATIONS_POOL_MAX_TOKENS;
-}
-
 export function registerCompactionHook(pi: ExtensionAPI, runtime: Runtime): void {
 	pi.on("session_before_compact", async (event: any, ctx: any) => {
 		if (runtime.compactHookInFlight) {
@@ -31,7 +22,6 @@ export function registerCompactionHook(pi: ExtensionAPI, runtime: Runtime): void
 			const projection = buildCompactionProjection(
 				branchEntries as Entry[],
 				firstKeptEntryId,
-				{ observationsPoolMaxTokens: observationsPoolMaxTokens(runtime) },
 			);
 			const summary = renderSummary(projection.reflections, projection.observations);
 

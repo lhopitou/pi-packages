@@ -1,5 +1,5 @@
 /**
- * /om:handover command: flushes observations and reflections, renders a handover
+ *  * /om:handover command: flushes observations and reflections, renders a handover
  * summary directly, and starts a fresh session.
  *
  * Uses "flush + direct render" instead of spawning an LLM subprocess:

@@ -63,7 +63,6 @@ export type ReflectionsSupersededEntryData = {
 export type MemoryDetails = {
 	type: typeof OM_FOLDED;
 	version: 1;
-	fullFold: boolean;
 	observations: Observation[];
 	reflections: Reflection[];
 };
@@ -158,7 +157,6 @@ export function isMemoryDetails(value: unknown): value is MemoryDetails {
 	return (
 		value.type === OM_FOLDED &&
 		value.version === 1 &&
-		typeof value.fullFold === "boolean" &&
 		Array.isArray(value.observations) &&
 		value.observations.every(isObservation) &&
 		Array.isArray(value.reflections) &&

@@ -261,7 +261,6 @@ describe("isMemoryDetails", () => {
 		assert.equal(isMemoryDetails({
 			type: OM_FOLDED,
 			version: 1,
-			fullFold: false,
 			observations: [makeObservation()],
 			reflections: [makeReflection()],
 		}), true);
@@ -271,7 +270,6 @@ describe("isMemoryDetails", () => {
 		assert.equal(isMemoryDetails({
 			type: "wrong",
 			version: 1,
-			fullFold: false,
 			observations: [],
 			reflections: [],
 		}), false);
@@ -281,7 +279,6 @@ describe("isMemoryDetails", () => {
 		assert.equal(isMemoryDetails({
 			type: OM_FOLDED,
 			version: 2,
-			fullFold: false,
 			observations: [],
 			reflections: [],
 		}), false);
@@ -291,7 +288,6 @@ describe("isMemoryDetails", () => {
 		assert.equal(isMemoryDetails({
 			type: OM_FOLDED,
 			version: 1,
-			fullFold: false,
 			observations: [{ bad: true }],
 			reflections: [],
 		}), false);

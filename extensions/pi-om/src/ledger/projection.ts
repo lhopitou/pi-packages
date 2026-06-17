@@ -22,12 +22,7 @@ export type ProjectionDiff = {
 	droppedOnlyInFull: Observation[];
 };
 
-export type CompactionProjectionConfig = {
-	observationsPoolMaxTokens: number;
-};
-
 export type CompactionProjection = Projection & {
-	fullFold: boolean;
 	details: MemoryDetails;
 };
 
@@ -55,10 +50,6 @@ function entryBoundary(entryId: string): ProjectionBoundary {
 
 function tipBoundary(): ProjectionBoundary {
 	return { kind: "tip" };
-}
-
-function noneBoundary(): ProjectionBoundary {
-	return { kind: "none" };
 }
 
 function boundaryIndex(entries: Entry[], indexes: Map<string, number>, boundary: ProjectionBoundary): number {
@@ -163,61 +154,37 @@ export function visibleProjection(entries: Entry[], upToEntryId?: string): Proje
 		return details ? projectionFromMemoryDetails(details) : { observations: [], reflections: [] };
 	}
 
-	return buildCompactionProjection(entries, upToEntryId, { observationsPoolMaxTokens: Number.POSITIVE_INFINITY });
+	return buildCompactionProjection(entries, upToEntryId);
 }
 
-export function latestFullFoldBoundaryId(entries: Entry[]): string | undefined {
-	const indexes = entryIndexById(entries);
-	for (let i = entries.length - 1; i >= 0; i--) {
-		const entry = entries[i];
-		if (entry.type !== "compaction") continue;
-		if (!isMemoryDetails(entry.details)) continue;
-		if (!entry.details.fullFold) continue;
-		if (!entry.firstKeptEntryId) continue;
-		if (!indexes.has(entry.firstKeptEntryId)) continue;
-		return entry.firstKeptEntryId;
-	}
-	return undefined;
-}
-
+/**
+ * Build the compaction projection: fold all observations, reflections,
+ * drops, and supersedes up to the compaction cut point.
+ *
+ * Every compaction is a full fold — the reflector controls the observation
+ * pool size via reflectAfterTokens, so there's no need for a separate
+ * "maintenance fold" that leaves reflections as raw kept entries.
+ */
 export function buildCompactionProjection(
 	entries: Entry[],
 	firstKeptEntryId: string,
-	config: CompactionProjectionConfig,
 ): CompactionProjection {
-	const fullFoldBoundaryId = latestFullFoldBoundaryId(entries);
-	// When no previous full-fold compaction exists, reflections and drops must use
-	// the same boundary as observations (firstKeptEntryId). noneBoundary() would
-	// exclude all reflections/drops because boundaryIndex returns -1, and
-	// isAtOrBefore(any, -1) is always false.
-	const maintenanceBoundary = fullFoldBoundaryId
-		? entryBoundary(fullFoldBoundaryId)
-		: entryBoundary(firstKeptEntryId);
-	const normalProjection = foldProjection(entries, {
-		observationsBoundary: entryBoundary(firstKeptEntryId),
-		reflectionsBoundary: maintenanceBoundary,
-		dropsBoundary: maintenanceBoundary,
-		supersedeBoundary: maintenanceBoundary,
+	const boundary = entryBoundary(firstKeptEntryId);
+	const projection = foldProjection(entries, {
+		observationsBoundary: boundary,
+		reflectionsBoundary: boundary,
+		dropsBoundary: boundary,
+		supersedeBoundary: boundary,
 	});
-	const observationTokens = normalProjection.observations.reduce(
-		(total, observation) => total + observation.tokenCount,
-		0,
-	);
-	const fullFold = observationTokens >= config.observationsPoolMaxTokens;
-	const projection = fullFold
-		? fullProjection(entries, firstKeptEntryId)
-		: normalProjection;
 
 	const details: MemoryDetails = {
 		type: OM_FOLDED,
 		version: 1,
-		fullFold,
 		observations: projection.observations,
 		reflections: projection.reflections,
 	};
 
 	return {
-		fullFold,
 		observations: projection.observations,
 		reflections: projection.reflections,
 		details,

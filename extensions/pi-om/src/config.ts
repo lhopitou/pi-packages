@@ -13,7 +13,6 @@ export interface Config {
 	observeAfterTokens: number;
 	reflectAfterTokens: number;
 	compactAfterTokens: number;
-	observationsPoolMaxTokens: number;
 	observationsPoolTargetTokens: number;
 	agentMaxTurns: number;
 	model?: ConfiguredModel;
@@ -27,8 +26,7 @@ export const DEFAULTS: Config = {
 	observeAfterTokens: 10_000,
 	reflectAfterTokens: 40_000,
 	compactAfterTokens: 81_000,
-	observationsPoolMaxTokens: 20_000,
-	observationsPoolTargetTokens: 10_000,
+	observationsPoolTargetTokens: 20_000,
 	agentMaxTurns: 16,
 	passive: false,
 	debugLog: false,
@@ -49,8 +47,8 @@ function validTargetOrUndefined(value: unknown, maxTokens: number): number | und
 	return target !== undefined && target < maxTokens ? target : undefined;
 }
 
-function derivedObservationPoolTarget(maxTokens: number): number {
-	return Math.floor(maxTokens / 2);
+function derivedObservationPoolTarget(reflectAfterTokens: number): number {
+	return Math.floor(reflectAfterTokens / 2);
 }
 
 function isThinkingLevel(value: unknown): value is ModelThinkingLevel {
@@ -81,7 +79,6 @@ function normalizeSettingsConfig(value: Record<string, unknown>): Partial<Config
 		"observeAfterTokens",
 		"reflectAfterTokens",
 		"compactAfterTokens",
-		"observationsPoolMaxTokens",
 		"observationsPoolTargetTokens",
 		"agentMaxTurns",
 		"handoverSuggestTokens",
@@ -136,8 +133,8 @@ export async function loadConfig(cwd: string, env: NodeJS.ProcessEnv = process.e
 	};
 	const target = validTargetOrUndefined(
 		merged.observationsPoolTargetTokens,
-		merged.observationsPoolMaxTokens,
-	) ?? derivedObservationPoolTarget(merged.observationsPoolMaxTokens);
+		merged.reflectAfterTokens,
+	) ?? derivedObservationPoolTarget(merged.reflectAfterTokens);
 
 	return {
 		...merged,

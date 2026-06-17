@@ -174,7 +174,6 @@ describe("visibleProjection", () => {
 			makeCompactionEntry("m1", {
 				type: OM_FOLDED,
 				version: 1,
-				fullFold: true,
 				observations: [obs1],
 				reflections: [ref1],
 			}, "comp1"),
@@ -197,18 +196,17 @@ describe("visibleProjection", () => {
 // ── buildCompactionProjection ──
 
 describe("buildCompactionProjection", () => {
-	it("returns normal projection when observation tokens are under pool max", () => {
+	it("folds observations up to cut point", () => {
 		const obs1 = makeObservation({ id: "aaa1111111111111", tokenCount: 100 });
 		const entries = [
 			makeSourceEntry("src1"),
 			makeObservationsRecordedEntry([obs1], "src1", "obs-e1"),
 		];
-		const proj = buildCompactionProjection(entries, "src1", { observationsPoolMaxTokens: 200 });
-		assert.equal(proj.fullFold, false);
+		const proj = buildCompactionProjection(entries, "src1");
 		assert.equal(proj.observations.length, 1);
 	});
 
-	it("includes reflections on first compaction (no prior full fold)", () => {
+	it("folds reflections up to cut point", () => {
 		const obs1 = makeObservation({ id: "aaa1111111111111", tokenCount: 100 });
 		const ref1 = makeReflection({ id: "fee1111111111111" });
 		const entries = [
@@ -216,13 +214,12 @@ describe("buildCompactionProjection", () => {
 			makeObservationsRecordedEntry([obs1], "src1", "obs-e1"),
 			makeReflectionsRecordedEntry([ref1], "src1", "ref-e1"),
 		];
-		const proj = buildCompactionProjection(entries, "src1", { observationsPoolMaxTokens: 200 });
-		assert.equal(proj.fullFold, false);
+		const proj = buildCompactionProjection(entries, "src1");
 		assert.equal(proj.observations.length, 1);
 		assert.equal(proj.reflections.length, 1);
 	});
 
-	it("includes drops on first compaction (no prior full fold)", () => {
+	it("applies drops up to cut point", () => {
 		const obs1 = makeObservation({ id: "aaa1111111111111", tokenCount: 100 });
 		const obs2 = makeObservation({ id: "bbb2222222222222", tokenCount: 100 });
 		const entries = [
@@ -230,17 +227,15 @@ describe("buildCompactionProjection", () => {
 			makeObservationsRecordedEntry([obs1, obs2], "src1", "obs-e1"),
 			makeObservationsDroppedEntry(["aaa1111111111111"], "src1", "drop-e1"),
 		];
-		const proj = buildCompactionProjection(entries, "src1", { observationsPoolMaxTokens: 200 });
-		assert.equal(proj.fullFold, false);
+		const proj = buildCompactionProjection(entries, "src1");
 		assert.equal(proj.observations.length, 1);
 		assert.equal(proj.observations[0].id, "bbb2222222222222");
 	});
 
-	it("uses maintenance boundary for reflections after prior full fold", () => {
+	it("folds all reflections and observations regardless of prior compaction", () => {
 		const obs1 = makeObservation({ id: "aaa1111111111111", tokenCount: 100 });
 		const ref1 = makeReflection({ id: "fee1111111111111" });
 		const ref2 = makeReflection({ id: "fee2222222222222" });
-		// First compaction was a full fold at src1
 		const entries = [
 			makeSourceEntry("src1"),
 			makeSourceEntry("src2"),
@@ -249,48 +244,13 @@ describe("buildCompactionProjection", () => {
 			makeCompactionEntry("src1", {
 				type: OM_FOLDED,
 				version: 1,
-				fullFold: true,
 				observations: [obs1],
 				reflections: [ref1],
 			}, "comp1"),
 			makeReflectionsRecordedEntry([ref2], "src2", "ref-e2"),
 		];
-		const proj = buildCompactionProjection(entries, "src2", { observationsPoolMaxTokens: 200 });
-		assert.equal(proj.fullFold, false);
-		// Maintenance boundary at src1 includes ref1 (coversUpToId src1 ≤ src1 boundary)
-		// but excludes ref2 (coversUpToId src2 > src1 boundary)
-		assert.equal(proj.reflections.length, 1);
-		assert.equal(proj.reflections[0].id, "fee1111111111111");
-	});
-
-	it("returns full fold projection when observation tokens exceed pool max", () => {
-		const obs1 = makeObservation({ id: "aaa1111111111111", tokenCount: 500 });
-		const ref1 = makeReflection({ id: "fee1111111111111" });
-		const entries = [
-			makeSourceEntry("src1"),
-			makeObservationsRecordedEntry([obs1], "src1", "obs-e1"),
-			makeReflectionsRecordedEntry([ref1], "src1", "ref-e1"),
-		];
-		const proj = buildCompactionProjection(entries, "src1", { observationsPoolMaxTokens: 100 });
-		assert.equal(proj.fullFold, true);
-		assert.equal(proj.observations.length, 1);
-		assert.equal(proj.reflections.length, 1);
-	});
-
-	it("full fold includes all reflections even on first compaction", () => {
-		const obs1 = makeObservation({ id: "aaa1111111111111", tokenCount: 500 });
-		const ref1 = makeReflection({ id: "fee1111111111111" });
-		const ref2 = makeReflection({ id: "fee2222222222222" });
-		const entries = [
-			makeSourceEntry("src1"),
-			makeSourceEntry("src2"),
-			makeObservationsRecordedEntry([obs1], "src1", "obs-e1"),
-			makeReflectionsRecordedEntry([ref1], "src1", "ref-e1"),
-			makeReflectionsRecordedEntry([ref2], "src2", "ref-e2"),
-		];
-		const proj = buildCompactionProjection(entries, "src2", { observationsPoolMaxTokens: 100 });
-		assert.equal(proj.fullFold, true);
-		assert.equal(proj.observations.length, 1);
+		const proj = buildCompactionProjection(entries, "src2");
+		// All reflections through cut point are included (no maintenance boundary)
 		assert.equal(proj.reflections.length, 2);
 	});
 
@@ -300,7 +260,7 @@ describe("buildCompactionProjection", () => {
 			makeSourceEntry("src1"),
 			makeObservationsRecordedEntry([obs1], "src1", "obs-e1"),
 		];
-		const proj = buildCompactionProjection(entries, "src1", { observationsPoolMaxTokens: 200 });
+		const proj = buildCompactionProjection(entries, "src1");
 		assert.equal(proj.details.type, OM_FOLDED);
 		assert.equal(proj.details.version, 1);
 	});
@@ -316,7 +276,7 @@ describe("buildCompactionProjection", () => {
 			makeReflectionsRecordedEntry([ref2], "src1", "ref-e2"),
 			makeReflectionsSupersededEntry(["fee1111111111111"], "src1", "sup-e1"),
 		];
-		const proj = buildCompactionProjection(entries, "src1", { observationsPoolMaxTokens: 200 });
+		const proj = buildCompactionProjection(entries, "src1");
 		assert.equal(proj.reflections.length, 1);
 		assert.equal(proj.reflections[0].id, "fee2222222222222");
 	});

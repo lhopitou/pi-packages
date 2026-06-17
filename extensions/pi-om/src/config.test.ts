@@ -12,8 +12,7 @@ describe("DEFAULTS", () => {
 		assert.equal(DEFAULTS.observeAfterTokens, 10_000);
 		assert.equal(DEFAULTS.reflectAfterTokens, 40_000);
 		assert.equal(DEFAULTS.compactAfterTokens, 81_000);
-		assert.equal(DEFAULTS.observationsPoolMaxTokens, 20_000);
-		assert.equal(DEFAULTS.observationsPoolTargetTokens, 10_000);
+		assert.equal(DEFAULTS.observationsPoolTargetTokens, 20_000);
 		assert.equal(DEFAULTS.agentMaxTurns, 16);
 		assert.equal(DEFAULTS.passive, false);
 		assert.equal(DEFAULTS.debugLog, false);
@@ -91,27 +90,26 @@ describe("loadConfig", () => {
 
 	it("derives observationsPoolTargetTokens when not specified", async () => {
 		await withTempDir(async (tmpDir) => {
-			writeProjectSettings(tmpDir, { "pi-om": { observationsPoolMaxTokens: 30_000 } });
+			writeProjectSettings(tmpDir, { "pi-om": { reflectAfterTokens: 60_000 } });
 			const config = await loadConfig(tmpDir);
-			assert.equal(config.observationsPoolMaxTokens, 30_000);
-			assert.equal(config.observationsPoolTargetTokens, 15_000); // half of max
+			assert.equal(config.reflectAfterTokens, 60_000);
+			assert.equal(config.observationsPoolTargetTokens, 30_000); // half of reflectAfterTokens
 		});
 	});
 
-	it("uses explicit target when valid and less than max", async () => {
+	it("uses explicit target when valid and less than reflectAfterTokens", async () => {
 		await withTempDir(async (tmpDir) => {
-			writeProjectSettings(tmpDir, { "pi-om": { observationsPoolMaxTokens: 30_000, observationsPoolTargetTokens: 8_000 } });
+			writeProjectSettings(tmpDir, { "pi-om": { reflectAfterTokens: 60_000, observationsPoolTargetTokens: 20_000 } });
 			const config = await loadConfig(tmpDir);
-			assert.equal(config.observationsPoolMaxTokens, 30_000);
-			assert.equal(config.observationsPoolTargetTokens, 8_000);
+			assert.equal(config.observationsPoolTargetTokens, 20_000);
 		});
 	});
 
-	it("rejects target >= maxTokens and falls back to derived", async () => {
+	it("rejects target >= reflectAfterTokens and falls back to derived", async () => {
 		await withTempDir(async (tmpDir) => {
-			writeProjectSettings(tmpDir, { "pi-om": { observationsPoolMaxTokens: 10_000, observationsPoolTargetTokens: 15_000 } });
+			writeProjectSettings(tmpDir, { "pi-om": { reflectAfterTokens: 40_000, observationsPoolTargetTokens: 50_000 } });
 			const config = await loadConfig(tmpDir);
-			assert.equal(config.observationsPoolTargetTokens, 5_000); // derived: half of max
+			assert.equal(config.observationsPoolTargetTokens, 20_000); // derived: half of reflectAfterTokens
 		});
 	});
 

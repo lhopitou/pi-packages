@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { observationPoolMetrics } from "../agents/dropper/pool.ts";
+import { observationPoolMetrics, observationTokenSum } from "../agents/dropper/pool.ts";
 import type { Runtime } from "../runtime.ts";
 import {
 	diffProjection,
@@ -10,7 +10,6 @@ import {
 	visibleProjection,
 	type Entry,
 } from "../ledger/index.ts";
-import { observationTokenSum } from "../agents/dropper/pool.ts";
 
 function pct(current: number, total: number): number {
 	return total > 0 ? Math.round((current / total) * 100) : 0;
@@ -31,7 +30,6 @@ export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime): void 
 			const full = fullProjection(entries);
 			const drift = diffProjection(visible, full);
 
-			const visibleObservationTokens = tokenSum(visible.observations);
 			const visibleReflectionTokens = tokenSum(visible.reflections);
 			const activeObservationPool = observationPoolMetrics(folded.activeObservations, runtime.config.observationsPoolTargetTokens);
 			const obsProgress = rawTokensSinceObservationCoverage(entries);
@@ -47,7 +45,6 @@ export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime): void 
 				`Next observation: ~${obsProgress.toLocaleString()} / ${runtime.config.observeAfterTokens.toLocaleString()} tokens (${pct(obsProgress, runtime.config.observeAfterTokens)}%)`,
 				`Next reflection:  ~${reflectionProgress.toLocaleString()} / ${runtime.config.reflectAfterTokens.toLocaleString()} obs tokens (${pct(reflectionProgress, runtime.config.reflectAfterTokens)}%)`,
 				`Next compaction:  ~${compactionProgress.toLocaleString()} / ${runtime.config.compactAfterTokens.toLocaleString()} tokens (${pct(compactionProgress, runtime.config.compactAfterTokens)}%)`,
-				`Visible observation pool: ~${visibleObservationTokens.toLocaleString()} / ${runtime.config.observationsPoolMaxTokens.toLocaleString()} tokens (${pct(visibleObservationTokens, runtime.config.observationsPoolMaxTokens)}%)`,
 				`Active observation pool: ~${activeObservationPool.observationTokens.toLocaleString()} / ${runtime.config.observationsPoolTargetTokens.toLocaleString()} target tokens (${pct(activeObservationPool.observationTokens, runtime.config.observationsPoolTargetTokens)}%)`,
 				`Reflection pool:         ~${visibleReflectionTokens.toLocaleString()} tokens`,
 			];
