@@ -29,7 +29,7 @@ import {
 
 type ResolvedModel = Extract<ResolveResult, { ok: true }>;
 
-type ConsolidationCtx = {
+export type ConsolidationCtx = {
 	cwd: string;
 	hasUI: boolean;
 	ui?: { notify: (message: string, type?: "warning" | "info" | "error") => void };
@@ -285,6 +285,163 @@ async function runReflectorStage(
 		outcome: "continue",
 		sameRunReflections: result.reflections,
 	};
+}
+
+/**
+ * Force-run observer regardless of thresholds. Used by /om:handover to flush
+ * all unobserved content before producing a handover summary.
+ * Same logic as runObserverStage but without the threshold gate.
+ * Minimum floor of 500 tokens prevents wasteful LLM calls on trivial content.
+ */
+async function forceRunObserverStage(
+	pi: ExtensionAPI,
+	runtime: Runtime,
+	ctx: ConsolidationCtx,
+	resolveModel: (stage: "observer") => Promise<ResolvedModel | undefined>,
+): Promise<StageOutcome> {
+	const entries = ctx.sessionManager.getBranch() as Entry[];
+	const tokens = rawTokensSinceObservationCoverage(entries);
+	if (tokens < 500) return "continue";
+
+	const lastCoverageIdx = latestCoverageIndex(entries, OM_OBSERVATIONS_RECORDED);
+	const chunkEntries = sourceEntriesAfter(entries, lastCoverageIdx);
+	const coversUpToId = chunkEntries.at(-1)?.id;
+	if (!coversUpToId) return "continue";
+
+	const { text: chunk, sourceEntryIds } = serializeSourceAddressedBranchEntries(chunkEntries);
+	if (!chunk.trim() || sourceEntryIds.length === 0) return "continue";
+
+	const memory = fullProjection(entries);
+	const priorReflections = memory.reflections.map(reflectionToSummaryLine);
+	const priorObservations = memory.observations.map(observationToSummaryLine);
+
+	if (ctx.hasUI) ctx.ui?.notify(
+		`pi-om: flush-observer running on ~${tokens.toLocaleString()}-token chunk`,
+		"info",
+	);
+
+	const resolved = await resolveModel("observer");
+	if (!resolved) return "abort";
+
+	const observations = await runObserver({
+		model: resolved.model as any,
+		apiKey: resolved.apiKey,
+		headers: resolved.headers,
+		priorReflections,
+		priorObservations,
+		chunk,
+		allowedSourceEntryIds: sourceEntryIds,
+		maxTurns: runtime.config.agentMaxTurns,
+		thinkingLevel: runtime.config.model?.thinking ?? "low",
+	});
+	if (!observations || observations.length === 0) return "continue";
+
+	const data = buildObservationsRecordedData(observations, coversUpToId);
+	if (!data) return "continue";
+	appendEntry(pi, OM_OBSERVATIONS_RECORDED, data);
+	if (ctx.hasUI) ctx.ui?.notify(
+		`pi-om: ${observations.length} observation${observations.length === 1 ? "" : "s"} recorded (flush)`,
+		"info",
+	);
+	return "continue";
+}
+
+/**
+ * Force-run reflector regardless of thresholds. Used by /om:handover to flush
+ * all unreflected observations before producing a handover summary.
+ * Same logic as runReflectorStage but without the threshold gate.
+ * Runs if there are any active observations with tokens > 0.
+ */
+async function forceRunReflectorStage(
+	pi: ExtensionAPI,
+	runtime: Runtime,
+	ctx: ConsolidationCtx,
+	resolveModel: (stage: "reflector") => Promise<ResolvedModel | undefined>,
+): Promise<ReflectorStageResult> {
+	const entries = ctx.sessionManager.getBranch() as Entry[];
+	const folded = foldLedger(entries);
+	const obsTokens = observationTokenSum(folded.activeObservations);
+	if (obsTokens <= 0) return { outcome: "continue", sameRunReflections: [] };
+
+	const observationCoverageId = latestCoverageMarkerId(entries, OM_OBSERVATIONS_RECORDED);
+	if (!observationCoverageId) return { outcome: "continue", sameRunReflections: [] };
+
+	if (ctx.hasUI) ctx.ui?.notify(
+		`pi-om: flush-reflector running (~${obsTokens.toLocaleString()} observation tokens)`,
+		"info",
+	);
+	const resolved = await resolveModel("reflector");
+	if (!resolved) return { outcome: "abort", sameRunReflections: [] };
+	const result = await runReflector({
+		model: resolved.model as any,
+		apiKey: resolved.apiKey,
+		headers: resolved.headers,
+		reflections: folded.activeReflections,
+		observations: folded.activeObservations,
+		maxTurns: runtime.config.agentMaxTurns,
+		thinkingLevel: runtime.config.model?.thinking ?? "low",
+	});
+	if (!result) return { outcome: "continue", sameRunReflections: [] };
+
+	if (result.reflections.length > 0) {
+		const data = buildReflectionsRecordedData(result.reflections, observationCoverageId);
+		if (data) appendEntry(pi, OM_REFLECTIONS_RECORDED, data);
+	}
+
+	if (result.supersededIds.length > 0) {
+		const supersededData = buildReflectionsSupersededData(result.supersededIds, observationCoverageId);
+		if (supersededData) appendEntry(pi, OM_REFLECTIONS_SUPERSEDED, supersededData);
+	}
+
+	// Drop observations now covered by new reflections
+	const coveredIds = new Set<string>();
+	for (const reflection of result.reflections) {
+		for (const id of reflection.supportingObservationIds) coveredIds.add(id);
+	}
+	const activeObsIds = new Set(folded.activeObservations.map((obs) => obs.id));
+	const droppableIds = [...coveredIds].filter((id) => activeObsIds.has(id));
+	if (droppableIds.length > 0) {
+		const dropData = buildObservationsDroppedData(droppableIds, observationCoverageId);
+		if (dropData) appendEntry(pi, OM_OBSERVATIONS_DROPPED, dropData);
+		if (ctx.hasUI) ctx.ui?.notify(
+			`pi-om: ${droppableIds.length} covered observation${droppableIds.length === 1 ? "" : "s"} dropped (flush)`,
+			"info",
+		);
+	}
+
+	return {
+		outcome: "continue",
+		sameRunReflections: result.reflections,
+	};
+}
+
+/**
+ * Flush consolidation: force-run observer + reflector regardless of thresholds.
+ * Used by /om:handover to ensure all unobserved content is captured before
+ * producing a handover summary. Skips dropper — not needed for handover.
+ */
+export async function flushConsolidation(
+	pi: ExtensionAPI,
+	runtime: Runtime,
+	ctx: ConsolidationCtx,
+): Promise<void> {
+	const resolveModel = makeModelResolver(runtime, ctx);
+
+	runtime.consolidationPhase = "observer";
+	try {
+		const observerOutcome = await forceRunObserverStage(pi, runtime, ctx, resolveModel);
+		if (observerOutcome === "abort") return;
+	} catch (error) {
+		debugLog("flush-observer.error", { errorMessage: runtime.recordConsolidationStageError(ctx, "observer", error) });
+		return;
+	}
+
+	runtime.consolidationPhase = "reflector";
+	try {
+		await forceRunReflectorStage(pi, runtime, ctx, resolveModel);
+	} catch (error) {
+		debugLog("flush-reflector.error", { errorMessage: runtime.recordConsolidationStageError(ctx, "reflector", error) });
+	}
 }
 
 async function runDropperStage(

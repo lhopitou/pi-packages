@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { observationToSummaryLine, reflectionToSummaryLine, renderSummary } from "./render-summary.ts";
+import { observationToSummaryLine, reflectionToSummaryLine, renderSummary, renderHandoverSummary } from "./render-summary.ts";
 import type { Observation, Reflection } from "./types.ts";
 
 function makeObservation(overrides: Partial<Observation> = {}): Observation {
@@ -75,5 +75,74 @@ describe("renderSummary", () => {
 	it("includes recall tool instructions", () => {
 		const summary = renderSummary([makeReflection()], [makeObservation()]);
 		assert.ok(summary.includes("recall tool"));
+	});
+});
+
+describe("renderHandoverSummary", () => {
+	it("returns empty string when both are empty", () => {
+		assert.equal(renderHandoverSummary([], []), "");
+	});
+
+	it("returns handover context instructions + durable facts section when only reflections exist", () => {
+		const ref = makeReflection({ id: "fee1111111111111", content: "Project uses TypeScript strict mode" });
+		const summary = renderHandoverSummary([ref], []);
+		assert.ok(summary.includes("Durable Facts"));
+		assert.ok(summary.includes("- Project uses TypeScript strict mode"));
+		assert.ok(summary.includes("handover document"));
+		// Should NOT include ledger bookkeeping (IDs, brackets)
+		assert.ok(!summary.includes("[fee1111111111111]"));
+	});
+
+	it("returns handover context instructions + observations section when only observations exist", () => {
+		const obs = makeObservation({ id: "aaa1111111111111", content: "User prefers dark theme", timestamp: "2025-06-17 14:30" });
+		const summary = renderHandoverSummary([], [obs]);
+		assert.ok(summary.includes("Observations"));
+		assert.ok(summary.includes("- 2025-06-17 14:30 — User prefers dark theme"));
+		// Should NOT include ledger bookkeeping (IDs, relevance markers)
+		assert.ok(!summary.includes("[aaa1111111111111]"));
+		assert.ok(!summary.includes("[medium]"));
+	});
+
+	it("returns both sections when both exist", () => {
+		const ref = makeReflection({ id: "fee1111111111111", content: "Test reflection" });
+		const obs = makeObservation({ id: "aaa1111111111111", content: "Test observation", timestamp: "2025-01-01 12:00" });
+		const summary = renderHandoverSummary([ref], [obs]);
+		assert.ok(summary.includes("Durable Facts"));
+		assert.ok(summary.includes("Observations"));
+		assert.ok(summary.includes("- Test reflection"));
+		assert.ok(summary.includes("- 2025-01-01 12:00 — Test observation"));
+	});
+
+	it("strips all ledger bookkeeping — no IDs, no relevance markers", () => {
+		const ref = makeReflection({ id: "fee1111111111111", content: "Test reflection" });
+		const obs = makeObservation({ id: "aaa1111111111111", content: "Test observation", relevance: "high", timestamp: "2025-06-17 14:30" });
+		const summary = renderHandoverSummary([ref], [obs]);
+		assert.ok(!summary.includes("[fee1111111111111]"));
+		assert.ok(!summary.includes("[aaa1111111111111]"));
+		assert.ok(!summary.includes("[high]"));
+		assert.ok(!summary.includes("[medium]"));
+	});
+
+	it("includes handover-specific instructions (not compaction instructions)", () => {
+		const summary = renderHandoverSummary([makeReflection()], [makeObservation()]);
+		assert.ok(summary.includes("handover document"));
+		assert.ok(summary.includes("Durable Facts"));
+		assert.ok(!summary.includes("recall tool"));
+	});
+
+	it("renders multiple reflections as bullet list", () => {
+		const ref1 = makeReflection({ id: "fee1111111111111", content: "Fact A" });
+		const ref2 = makeReflection({ id: "fee2222222222222", content: "Fact B" });
+		const summary = renderHandoverSummary([ref1, ref2], []);
+		assert.ok(summary.includes("- Fact A"));
+		assert.ok(summary.includes("- Fact B"));
+	});
+
+	it("renders multiple observations with timestamps as bullet list", () => {
+		const obs1 = makeObservation({ id: "aaa1111111111111", content: "Event A", timestamp: "2025-06-17 10:00" });
+		const obs2 = makeObservation({ id: "bbb2222222222222", content: "Event B", timestamp: "2025-06-17 11:00" });
+		const summary = renderHandoverSummary([], [obs1, obs2]);
+		assert.ok(summary.includes("- 2025-06-17 10:00 — Event A"));
+		assert.ok(summary.includes("- 2025-06-17 11:00 — Event B"));
 	});
 });

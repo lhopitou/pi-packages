@@ -29,3 +29,23 @@ export function renderSummary(reflections: Reflection[], observations: Observati
 	}
 	return parts.join("\n\n");
 }
+
+const HANDOVER_CONTEXT_INSTRUCTIONS = `This is a handover document from a previous session phase. Use it to continue work effectively.
+
+- Durable Facts: stable, long-lived facts about the user, project, decisions, and constraints. Preserve these as-is — they have been validated by the reflector.
+- Observations: timestamped events from the previous session. These are transient context — the new session's observer will produce fresh observations going forward.
+
+Treat durable facts as ground truth. Observations provide orientation but may be superseded by new events.`;
+
+export function renderHandoverSummary(reflections: Reflection[], observations: Observation[]): string {
+	if (reflections.length === 0 && observations.length === 0) return "";
+
+	const parts: string[] = [HANDOVER_CONTEXT_INSTRUCTIONS];
+	if (reflections.length > 0) {
+		parts.push(`## Durable Facts (from reflections — preserve as-is)\n${reflections.map((r) => `- ${r.content}`).join("\n")}`);
+	}
+	if (observations.length > 0) {
+		parts.push(`## Observations (active session events)\n${observations.map((o) => `- ${o.timestamp} — ${o.content}`).join("\n")}`);
+	}
+	return parts.join("\n\n");
+}

@@ -1,6 +1,6 @@
 /**
  * Soft suggestion: fires ctx.ui.notify() once per session when context
- * usage crosses a configurable threshold, suggesting /handover.
+ * usage crosses a configurable threshold, suggesting /om:handover.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -19,7 +19,7 @@ export function registerHandoverSuggest(pi: ExtensionAPI, runtime: Runtime): voi
 
 		runtime.handoverSuggested = true;
 		ctx.ui.notify(
-			`pi-om: context usage is ~${usage.tokens.toLocaleString()} tokens (threshold: ${threshold.toLocaleString()}). Consider calling /handover to start a fresh session with a distilled handoff.`,
+			`pi-om: context usage is ~${usage.tokens.toLocaleString()} tokens (threshold: ${threshold.toLocaleString()}). Consider calling /om:handover to start a fresh session with a distilled handoff.`,
 			"info",
 		);
 	});
