@@ -42,7 +42,7 @@ function renderObservationOnlyTextFromResult(result: Extract<RecallResult, { sta
 	const sections: string[] = [];
 	if (result.collision) sections.push(`Memory id ${result.memoryId} matched multiple observations; returning all matching source results.`);
 	for (const match of result.observations.filter((m) => m.observation.id === result.memoryId)) {
-		if (match.status === "dropped") sections.push(`Observation ${match.observation.id} is dropped from active memory but remains recallable.`);
+		if (match.status === "dropped") sections.push(`Observation ${match.observation.id} is dropped from live memory but remains recallable.`);
 		if (match.missingSourceEntryIds.length > 0) {
 			sections.push(`Some source entries are unavailable: ${match.missingSourceEntryIds.join(", ")}`);
 			continue;

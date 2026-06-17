@@ -45,7 +45,7 @@ export function renderHandoverSummary(reflections: Reflection[], observations: O
 		parts.push(`## Durable Facts (from reflections — preserve as-is)\n${reflections.map((r) => `- ${r.content}`).join("\n")}`);
 	}
 	if (observations.length > 0) {
-		parts.push(`## Observations (active session events)\n${observations.map((o) => `- ${o.timestamp} — ${o.content}`).join("\n")}`);
+		parts.push(`## Observations (live session events)\n${observations.map((o) => `- ${o.timestamp} — ${o.content}`).join("\n")}`);
 	}
 	return parts.join("\n\n");
 }

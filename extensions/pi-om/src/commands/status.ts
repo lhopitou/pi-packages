@@ -38,14 +38,14 @@ export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime): void 
 
 			const lines = [
 				"── Memory ──",
-				`Observations: ${folded.observations.length} recorded / ${folded.droppedObservationIds.size} dropped / ${folded.activeObservations.length} active / ${visible.observations.length} visible${drift.observationsOnlyInFull.length > 0 ? ` +${drift.observationsOnlyInFull.length}` : ""}`,
-				`Reflections:  ${folded.reflections.length} recorded / ${folded.supersededReflectionIds.size} superseded / ${folded.activeReflections.length} active / ${visible.reflections.length} visible${drift.reflectionsOnlyInFull.length > 0 ? ` +${drift.reflectionsOnlyInFull.length}` : ""}`,
+				`Observations: ${folded.observations.length} recorded / ${folded.droppedObservationIds.size} dropped / ${folded.activeObservations.length} live / ${visible.observations.length} in context${drift.observationsOnlyInFull.length > 0 ? ` +${drift.observationsOnlyInFull.length}` : ""}`,
+				`Reflections:  ${folded.reflections.length} recorded / ${folded.supersededReflectionIds.size} superseded / ${folded.activeReflections.length} live / ${visible.reflections.length} in context${drift.reflectionsOnlyInFull.length > 0 ? ` +${drift.reflectionsOnlyInFull.length}` : ""}`,
 				"",
 				"── Activity ──",
 				`Next observation: ~${obsProgress.toLocaleString()} / ${runtime.config.observeAfterTokens.toLocaleString()} tokens (${pct(obsProgress, runtime.config.observeAfterTokens)}%)`,
 				`Next reflection:  ~${reflectionProgress.toLocaleString()} / ${runtime.config.reflectAfterTokens.toLocaleString()} obs tokens (${pct(reflectionProgress, runtime.config.reflectAfterTokens)}%)`,
 				`Next compaction:  ~${compactionProgress.toLocaleString()} / ${runtime.config.compactAfterTokens.toLocaleString()} tokens (${pct(compactionProgress, runtime.config.compactAfterTokens)}%)`,
-				`Active observation pool: ~${activeObservationPool.observationTokens.toLocaleString()} / ${runtime.config.observationsPoolTargetTokens.toLocaleString()} target tokens (${pct(activeObservationPool.observationTokens, runtime.config.observationsPoolTargetTokens)}%)`,
+				`Live observation pool: ~${activeObservationPool.observationTokens.toLocaleString()} / ${runtime.config.observationsPoolTargetTokens.toLocaleString()} target tokens (${pct(activeObservationPool.observationTokens, runtime.config.observationsPoolTargetTokens)}%)`,
 				`Reflection pool:         ~${visibleReflectionTokens.toLocaleString()} tokens`,
 			];
 

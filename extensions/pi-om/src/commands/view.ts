@@ -13,7 +13,7 @@ function renderList<T>(items: T[], render: (item: T) => string, empty: string): 
 	return items.length > 0 ? items.map(render).join("\n") : empty;
 }
 
-function renderContentOnlyProjection(projection: Projection, emptyScope: "visible" | "recorded"): string {
+function renderContentOnlyProjection(projection: Projection, emptyScope: "context" | "recorded"): string {
 	return [
 		"── Reflections ──",
 		renderList(projection.reflections, reflectionToSummaryLine, `No ${emptyScope} reflections.`),
@@ -25,7 +25,7 @@ function renderContentOnlyProjection(projection: Projection, emptyScope: "visibl
 
 export function registerViewCommand(pi: ExtensionAPI, runtime: Runtime): void {
 	pi.registerCommand("om:view", {
-		description: "Print observational memory content (visible by default, full for recorded memory)",
+		description: "Print observational memory content (context by default, full for recorded memory)",
 		handler: async (args, ctx) => {
 			await runtime.ensureConfig(ctx.cwd);
 			const entries = ctx.sessionManager.getBranch() as Entry[];
@@ -36,12 +36,12 @@ export function registerViewCommand(pi: ExtensionAPI, runtime: Runtime): void {
 				return;
 			}
 
-			if (mode && mode !== "visible") {
+			if (mode && mode !== "context") {
 				ctx.ui.notify("Usage: /om:view [full]", "info");
 				return;
 			}
 
-			ctx.ui.notify(renderContentOnlyProjection(visibleProjection(entries), "visible"), "info");
+			ctx.ui.notify(renderContentOnlyProjection(visibleProjection(entries), "context"), "info");
 		},
 	});
 }

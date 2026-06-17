@@ -62,8 +62,7 @@ function anyStageDue(entries: Entry[], runtime: Runtime): boolean {
 	const folded = foldLedger(entries);
 	const obsTokens = observationTokenSum(folded.activeObservations);
 	if (obsTokens >= runtime.config.reflectAfterTokens) return true;
-	const metrics = observationPoolMetrics(folded.activeObservations, runtime.config.observationsPoolTargetTokens);
-	return metrics.ready;
+	return false;
 }
 
 function makeModelResolver(runtime: Runtime, ctx: ConsolidationCtx): (stage: "observer" | "reflector" | "dropper") => Promise<ResolvedModel | undefined> {
@@ -162,11 +161,16 @@ async function runConsolidationPipeline(
 		return;
 	}
 
-	runtime.consolidationPhase = "dropper";
-	try {
-		await runDropperStage(pi, runtime, ctx, resolveModel);
-	} catch (error) {
-		debugLog("dropper.error", { errorMessage: runtime.recordConsolidationStageError(ctx, "dropper", error) });
+	// Dropper only runs as post-reflection maintenance: when the reflector
+	// just produced new reflections, check if the observation pool is still
+	// over target and prune if so.
+	if (reflectorResult.sameRunReflections.length > 0) {
+		runtime.consolidationPhase = "dropper";
+		try {
+			await runDropperStage(pi, runtime, ctx, resolveModel);
+		} catch (error) {
+			debugLog("dropper.error", { errorMessage: runtime.recordConsolidationStageError(ctx, "dropper", error) });
+		}
 	}
 }
 
@@ -459,7 +463,7 @@ async function runDropperStage(
 	if (!metrics.ready) return "continue";
 
 	if (ctx.hasUI) ctx.ui?.notify(
-		`pi-om: dropper running — active pool ~${metrics.observationTokens.toLocaleString()} / ${metrics.targetTokens.toLocaleString()} target tokens`,
+		`pi-om: dropper running — live pool ~${metrics.observationTokens.toLocaleString()} / ${metrics.targetTokens.toLocaleString()} target tokens`,
 		"info",
 	);
 	const resolved = await resolveModel("dropper");
