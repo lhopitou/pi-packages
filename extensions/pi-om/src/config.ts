@@ -25,7 +25,7 @@ export interface Config {
 
 export const DEFAULTS: Config = {
 	observeAfterTokens: 10_000,
-	reflectAfterTokens: 20_000,
+	reflectAfterTokens: 40_000,
 	compactAfterTokens: 81_000,
 	observationsPoolMaxTokens: 20_000,
 	observationsPoolTargetTokens: 10_000,

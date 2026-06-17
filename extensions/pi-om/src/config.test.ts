@@ -10,7 +10,7 @@ import { loadConfig, readEnvConfig, DEFAULTS } from "./config.ts";
 describe("DEFAULTS", () => {
 	it("provides sensible default values", () => {
 		assert.equal(DEFAULTS.observeAfterTokens, 10_000);
-		assert.equal(DEFAULTS.reflectAfterTokens, 20_000);
+		assert.equal(DEFAULTS.reflectAfterTokens, 40_000);
 		assert.equal(DEFAULTS.compactAfterTokens, 81_000);
 		assert.equal(DEFAULTS.observationsPoolMaxTokens, 20_000);
 		assert.equal(DEFAULTS.observationsPoolTargetTokens, 10_000);

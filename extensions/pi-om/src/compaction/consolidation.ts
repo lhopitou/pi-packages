@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { runDropper } from "../agents/dropper/agent.ts";
-import { observationPoolMetrics } from "../agents/dropper/pool.ts";
+import { observationPoolMetrics, observationTokenSum } from "../agents/dropper/pool.ts";
 import { runObserver } from "../agents/observer/agent.ts";
 import { runReflector } from "../agents/reflector/agent.ts";
 import { debugLog, withDebugLogContext } from "../debug-log.ts";
@@ -15,7 +15,6 @@ import {
 	buildObservationsRecordedData,
 	buildReflectionsRecordedData,
 	buildReflectionsSupersededData,
-	earlierCoverageMarkerId,
 	foldLedger,
 	fullProjection,
 	isSourceEntry,
@@ -23,7 +22,6 @@ import {
 	latestCoverageMarkerId,
 	observationToSummaryLine,
 	rawTokensSinceObservationCoverage,
-	rawTokensSinceReflectionCoverage,
 	reflectionToSummaryLine,
 	type Entry,
 	type Reflection,
@@ -49,7 +47,6 @@ type StageOutcome = "continue" | "abort";
 type ReflectorStageResult = {
 	outcome: StageOutcome;
 	sameRunReflections: Reflection[];
-	effectiveReflectionCoverageId?: string;
 };
 
 function sourceEntriesAfter(entries: Entry[], index: number): Entry[] {
@@ -60,20 +57,13 @@ function appendEntry(pi: ExtensionAPI, customType: string, data: unknown): void 
 	pi.appendEntry(customType, data);
 }
 
-function mergeReflections(existing: Reflection[], additional: Reflection[]): Reflection[] {
-	const seen = new Set(existing.map((reflection) => reflection.id));
-	const merged = [...existing];
-	for (const reflection of additional) {
-		if (seen.has(reflection.id)) continue;
-		seen.add(reflection.id);
-		merged.push(reflection);
-	}
-	return merged;
-}
-
 function anyStageDue(entries: Entry[], runtime: Runtime): boolean {
-	return rawTokensSinceObservationCoverage(entries) >= runtime.config.observeAfterTokens
-		|| rawTokensSinceReflectionCoverage(entries) >= runtime.config.reflectAfterTokens;
+	if (rawTokensSinceObservationCoverage(entries) >= runtime.config.observeAfterTokens) return true;
+	const folded = foldLedger(entries);
+	const obsTokens = observationTokenSum(folded.activeObservations);
+	if (obsTokens >= runtime.config.reflectAfterTokens) return true;
+	const metrics = observationPoolMetrics(folded.activeObservations, runtime.config.observationsPoolTargetTokens);
+	return metrics.ready;
 }
 
 function makeModelResolver(runtime: Runtime, ctx: ConsolidationCtx): (stage: "observer" | "reflector" | "dropper") => Promise<ResolvedModel | undefined> {
@@ -174,7 +164,7 @@ async function runConsolidationPipeline(
 
 	runtime.consolidationPhase = "dropper";
 	try {
-		await runDropperStage(pi, runtime, ctx, resolveModel, reflectorResult.sameRunReflections, reflectorResult.effectiveReflectionCoverageId);
+		await runDropperStage(pi, runtime, ctx, resolveModel);
 	} catch (error) {
 		debugLog("dropper.error", { errorMessage: runtime.recordConsolidationStageError(ctx, "dropper", error) });
 	}
@@ -240,20 +230,19 @@ async function runReflectorStage(
 	resolveModel: (stage: "reflector") => Promise<ResolvedModel | undefined>,
 ): Promise<ReflectorStageResult> {
 	const entries = ctx.sessionManager.getBranch() as Entry[];
-	const reflectionTokens = rawTokensSinceReflectionCoverage(entries);
-	if (reflectionTokens < runtime.config.reflectAfterTokens) return { outcome: "continue", sameRunReflections: [] };
+	const folded = foldLedger(entries);
+	const obsTokens = observationTokenSum(folded.activeObservations);
+	if (obsTokens < runtime.config.reflectAfterTokens) return { outcome: "continue", sameRunReflections: [] };
 
 	const observationCoverageId = latestCoverageMarkerId(entries, OM_OBSERVATIONS_RECORDED);
 	if (!observationCoverageId) return { outcome: "continue", sameRunReflections: [] };
 
 	if (ctx.hasUI) ctx.ui?.notify(
-		`pi-om: reflector running (~${reflectionTokens.toLocaleString()} tokens)`,
+		`pi-om: reflector running (~${obsTokens.toLocaleString()} observation tokens)`,
 		"info",
 	);
 	const resolved = await resolveModel("reflector");
 	if (!resolved) return { outcome: "abort", sameRunReflections: [] };
-
-	const folded = foldLedger(entries);
 	const result = await runReflector({
 		model: resolved.model as any,
 		apiKey: resolved.apiKey,
@@ -275,10 +264,26 @@ async function runReflectorStage(
 		if (supersededData) appendEntry(pi, OM_REFLECTIONS_SUPERSEDED, supersededData);
 	}
 
+	// Drop observations now covered by new reflections (Mastra-aligned:
+	// reflection replaces observations, same as observation replaces raw messages).
+	const coveredIds = new Set<string>();
+	for (const reflection of result.reflections) {
+		for (const id of reflection.supportingObservationIds) coveredIds.add(id);
+	}
+	const activeObsIds = new Set(folded.activeObservations.map((obs) => obs.id));
+	const droppableIds = [...coveredIds].filter((id) => activeObsIds.has(id));
+	if (droppableIds.length > 0) {
+		const dropData = buildObservationsDroppedData(droppableIds, observationCoverageId);
+		if (dropData) appendEntry(pi, OM_OBSERVATIONS_DROPPED, dropData);
+		if (ctx.hasUI) ctx.ui?.notify(
+			`pi-om: ${droppableIds.length} covered observation${droppableIds.length === 1 ? "" : "s"} dropped (replaced by reflections)`,
+			"info",
+		);
+	}
+
 	return {
 		outcome: "continue",
 		sameRunReflections: result.reflections,
-		effectiveReflectionCoverageId: observationCoverageId,
 	};
 }
 
@@ -287,11 +292,7 @@ async function runDropperStage(
 	runtime: Runtime,
 	ctx: ConsolidationCtx,
 	resolveModel: (stage: "dropper") => Promise<ResolvedModel | undefined>,
-	sameRunReflections: Reflection[],
-	sameRunReflectionCoverageId: string | undefined,
 ): Promise<StageOutcome> {
-	if (!sameRunReflectionCoverageId || sameRunReflections.length === 0) return "continue";
-
 	const entries = ctx.sessionManager.getBranch() as Entry[];
 	const observationCoverageId = latestCoverageMarkerId(entries, OM_OBSERVATIONS_RECORDED);
 	if (!observationCoverageId) return "continue";
@@ -307,19 +308,17 @@ async function runDropperStage(
 	const resolved = await resolveModel("dropper");
 	if (!resolved) return "abort";
 
-	const reflectionsForDropper = mergeReflections(folded.activeReflections, sameRunReflections);
 	const droppedIds = await runDropper({
 		model: resolved.model as any,
 		apiKey: resolved.apiKey,
 		headers: resolved.headers,
-		reflections: reflectionsForDropper,
+		reflections: folded.activeReflections,
 		observations: folded.activeObservations,
 		targetTokens: runtime.config.observationsPoolTargetTokens,
 		maxTurns: runtime.config.agentMaxTurns,
 		thinkingLevel: runtime.config.model?.thinking ?? "low",
 	});
-	const coversUpToId = earlierCoverageMarkerId(entries, observationCoverageId, sameRunReflectionCoverageId);
-	const data = coversUpToId && droppedIds ? buildObservationsDroppedData(droppedIds, coversUpToId) : undefined;
+	const data = droppedIds ? buildObservationsDroppedData(droppedIds, observationCoverageId) : undefined;
 	if (data) appendEntry(pi, OM_OBSERVATIONS_DROPPED, data);
 	return "continue";
 }
