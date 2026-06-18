@@ -1,0 +1,51 @@
+{
+  "name": "pi-hashline-edit-pro",
+  "version": "0.6.1",
+  "description": "Strict hashline read/replace tool for pi-coding-agent with hash-anchored edits (4-char, 24-bit)",
+  "main": "index.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YuGiMob/pi-hashline-edit-pro.git"
+  },
+  "author": "pi-hashline-edit-pro contributors",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "coding-agent",
+    "extension",
+    "hashline",
+    "hash-anchored",
+    "strict"
+  ],
+  "license": "MIT",
+  "files": [
+    "index.ts",
+    "src",
+    "prompts",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "dependencies": {
+    "diff": "^8.0.2",
+    "file-type": "^21.3.0",
+    "xxhash-wasm": "^1.1.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.74.0",
+    "@earendil-works/pi-tui": "*"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "@types/node": "^22.0.0",
+    "vitest": "^4.1.8"
+  }
+}

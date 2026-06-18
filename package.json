@@ -13,10 +13,13 @@
     "test": "node --test extensions/pi-om/src/**/*.test.ts"
   },
   "dependencies": {
+    "file-type": "^21.3.0",
     "p-limit": "^6.1.0",
     "turndown": "^7.2.0",
-    "unpdf": "^1.6.2"
+    "unpdf": "^1.6.2",
+    "xxhash-wasm": "^1.1.0"
   },
+
   "devDependencies": {
     "@types/turndown": "^5.0.0",
     "typescript": "^5.7.0"
@@ -38,7 +41,7 @@
       "./extensions/rg-fd.ts",
       "./extensions/get-system-prompt.ts",
       "./extensions/auto-memory.ts",
-      "./extensions/hash-edit.ts",
+      "./extensions/pi-hashline-edit-pro/index.ts",
       "./extensions/pi-om/index.ts"
     ],
     "skills": [
