@@ -59,6 +59,9 @@ export const DELEGATION_TOOL_DENYLIST = [
 	TOOL_NAME,
 	"subagent",
 	"subagent_status",
+	"bash",
+	"edit",
+	"write"
 ] as const;
 
 const DelegateParams = Type.Object({
