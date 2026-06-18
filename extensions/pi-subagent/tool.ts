@@ -123,10 +123,11 @@ export function registerTools(
     promptSnippet:
       "Delegate to specialized subagents for isolated tasks. Actions: run, run_bg (background), status, collect, cancel. Call list_subagents() for delegation rules.",
     promptGuidelines: [
-      "Prefer subagent over direct tool calls for any task that involves reading, scanning, mapping, or exploring files — even small directories. The goal is context hygiene: keep the parent session clean by offloading file reads to an isolated agent.",
+      "Prefer subagent over direct tool calls for any task that involves reading, scanning, mapping, exploring files, web-searching or context-heavy tasks. The goal is context hygiene: keep the parent session clean by offloading file reads to an isolated agent.",
       "Use subagent explore for: tasks that would require reading many files or scanning large directories — enough reads to clutter the parent context. Do not delegate explore for small tasks like reading 2-3 files; handle those directly.",
       "Use subagent reviewer for: code review, second opinion, audit, or independent verification. Must use reviewer when the user explicitly asks for review.",
       "Use subagent planner for: architecture design, migration planning, or working through ambiguous requirements before implementation. Must use planner when the user asks for a plan or approach.",
+      "Use subagent web-searcher for: searches the web, fetches page content, finds code examples, and synthesizes information from multiple sources.",
       "Do not use subagent for trivial answers answerable without reading files (e.g., 'what is the package name in package.json' — just read it), obvious typo fixes, or tasks requiring ongoing conversation context that the subagent won't have.",
       "Write-capable subagent delegation is exceptional — the parent owns implementation and final validation by default.",
       "When delegating, provide a self-contained task with objective, relevant context, constraints, and expected output format. Call list_subagents() for full agent details.",
