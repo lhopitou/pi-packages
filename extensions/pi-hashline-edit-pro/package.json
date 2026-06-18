@@ -30,11 +30,6 @@
       "./index.ts"
     ]
   },
-  "dependencies": {
-    "diff": "^8.0.2",
-    "file-type": "^21.3.0",
-    "xxhash-wasm": "^1.1.0"
-  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": ">=0.74.0",
     "@earendil-works/pi-tui": "*"
