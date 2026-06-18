@@ -31,10 +31,10 @@ Agent definitions for the pi-subagent system:
 pi install git:github.com/<user>/pi-packages
 
 # Or install locally for development
-pi install /home/lhopitou/pi-packages
+pi install ~/pi-packages
 
 # Try without installing
-pi -e /home/lhopitou/pi-packages
+pi -e ~/pi-packages
 ```
 
 ## Runtime Config

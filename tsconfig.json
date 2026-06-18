@@ -10,24 +10,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "paths": {
-      "@earendil-works/pi-coding-agent": [
-        "/home/lhopitou/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-coding-agent"
-      ],
-      "@earendil-works/pi-ai": [
-        "/home/lhopitou/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-ai"
-      ],
-      "@earendil-works/pi-agent-core": [
-        "/home/lhopitou/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-agent-core"
-      ],
-      "@earendil-works/pi-tui": [
-        "/home/lhopitou/.nvm/versions/node/v24.15.0/lib/node_modules/@earendil-works/pi-tui"
-      ],
-      "typebox": [
-        "/home/lhopitou/.nvm/versions/node/v24.15.0/lib/node_modules/typebox"
-      ]
-    }
+    "noEmit": true
   },
   "include": ["extensions/**/*.ts"],
   "exclude": ["node_modules", "extensions/pi-web-access/node_modules", "extensions/pi-om/node_modules"]

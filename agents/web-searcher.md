@@ -10,7 +10,7 @@ delegate_when: |
   web_search, code_search, or fetch_content — especially when multiple
   queries or sources are needed.
 extensions:
-  - /home/lhopitou/pi-packages/extensions/pi-web-access/index.ts
+  - ~/.pi/agent/extensions/pi-web-access/index.ts
 skills: []
 prompt_mode: replace
 inherit_context: false
