@@ -1,5 +1,5 @@
 ---
-description: Web research specialist that searches the web, fetches page content, finds code examples, and synthesizes information from multiple sources
+description: Current web search, API docs, code examples, content extraction. Use when the task needs live internet information outside training data.
 tools: read, web_search, code_search, fetch_content, get_search_content
 thinking: low
 delegate_when: |

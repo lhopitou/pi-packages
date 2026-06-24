@@ -1,5 +1,5 @@
 ---
-description: Independent code review, second opinion, audit, or fresh-eye verification
+description: Independent code review, audit, second opinion. Use when the user asks for review, audit, or verification of non-trivial changes.
 tools: read, grep, find, ls
 thinking: high
 delegate_when: |

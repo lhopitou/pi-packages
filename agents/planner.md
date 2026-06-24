@@ -1,5 +1,5 @@
 ---
-description: Architecture design, migration planning, and working through ambiguous requirements before implementation
+description: Architecture design, migration plans, refactoring strategies. Use when the user asks for a plan, approach, or how to implement something.
 tools: read, grep, find, ls
 thinking: high
 delegate_when: |

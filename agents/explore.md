@@ -1,5 +1,5 @@
 ---
-description: Fast read-only exploration for tasks that would fill the parent context with many file reads
+description: Broad codebase scans, project mapping, many file reads. Use when exploration would clutter parent context.
 tools: read, grep, find, ls
 thinking: low
 delegate_when: |
