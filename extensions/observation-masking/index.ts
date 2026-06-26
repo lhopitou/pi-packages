@@ -204,17 +204,38 @@ export default async function (pi: ExtensionAPI) {
   let config = await loadConfig();
   let sessionStats: SessionStats = { maskedCount: 0, tokensBefore: 0, tokensAfter: 0 };
   let lastMaskResult: MaskResult | null = null;
+  /** Actual input token count reported by the provider in the last assistant message (preferred). */
+  let lastProviderInputTokens: number | null = null;
 
   // ── Status bar helper ────────────────────────────────────────
 
+  function formatTokens(n: number): string {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+    return String(n);
+  }
+
   function updateStatus(ctx: any): void {
     if (!ctx?.ui?.setStatus) return;
-    if (config.enabled) {
+
+    if (!config.enabled) {
+      ctx.ui.setStatus("obs-mask", "ObsMask: off");
+      return;
+    }
+
+    const contextWindow = ctx.model?.contextWindow;
+    // Only show provider-reported input tokens — the chars÷4 estimate is misleading
+    // because it only sees new-turn messages, not the full context (system prompt, tools, etc.)
+    if (lastProviderInputTokens != null && contextWindow) {
+      const pct = Math.round((lastProviderInputTokens / contextWindow) * 100);
+      ctx.ui.setStatus(
+        "obs-mask",
+        `ObsMask: ${formatTokens(lastProviderInputTokens)}/${formatTokens(contextWindow)} (${pct}%)`,
+      );
+    } else {
       const errNote = config.keepErrors ? "" : " (no-err)";
       const turnLabel = config.keepTurns === 0 ? "all" : String(config.keepTurns);
       ctx.ui.setStatus("obs-mask", `ObsMask: keep ${turnLabel}${errNote}`);
-    } else {
-      ctx.ui.setStatus("obs-mask", "ObsMask: off");
     }
   }
 
@@ -225,6 +246,7 @@ export default async function (pi: ExtensionAPI) {
       const messages = (event.messages ?? []) as AgentMessage[];
 
       lastMaskResult = applyMasking(messages, config);
+
 
       if (lastMaskResult.maskedCount > 0) {
         sessionStats.maskedCount += lastMaskResult.maskedCount;
@@ -246,9 +268,25 @@ export default async function (pi: ExtensionAPI) {
     updateStatus(ctx);
   });
 
-  // ── Event: agent_end — show turn-level stats ──────────────────
+  // ── Event: agent_end — extract provider token count, update status ──
 
   pi.on("agent_end", async (_event, ctx) => {
+    // Extract input token count from the last assistant message.
+    // Providers split usage into input (new) + cacheRead (cached) — we want the total.
+    const messages = _event.messages as AgentMessage[];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i] as any;
+      if (msg.role === "assistant" && msg.usage) {
+        const u = msg.usage;
+        // input = new non-cached tokens, cacheRead = cached tokens
+        // totalTokens = input + cacheRead + output (safe fallback)
+        lastProviderInputTokens =
+          (u.input != null && u.cacheRead != null) ? u.input + u.cacheRead
+          : u.totalTokens ?? u.input ?? null;
+        break;
+      }
+    }
+
     if (lastMaskResult && lastMaskResult.maskedCount > 0) {
       const saved = lastMaskResult.tokensBefore - lastMaskResult.tokensAfter;
       if (saved > 250) {
@@ -331,30 +369,32 @@ export default async function (pi: ExtensionAPI) {
         case "stats":
         case "": {
           const savedTokens = sessionStats.tokensBefore - sessionStats.tokensAfter;
-          const savingsPct =
-            sessionStats.tokensBefore > 0
-              ? Math.round((savedTokens / sessionStats.tokensBefore) * 100)
-              : 0;
 
           const lines = [
             `ObsMask: ${config.enabled ? "✅ enabled" : "❌ disabled"}`,
             `Turns kept intact: ${config.keepTurns}${config.keepTurns === 0 ? " (all masked)" : ""}`,
             `Error preservation: ${config.keepErrors ? "on" : "off"}`,
-            ``,
-            `Session (token estimates, chars ÷ 4):`,
-            `  Outputs masked:  ${sessionStats.maskedCount}`,
-            `  Tokens before:   ~${sessionStats.tokensBefore.toLocaleString()}`,
-            `  Tokens after:    ~${sessionStats.tokensAfter.toLocaleString()}`,
-            `  Tokens saved:    ~${savedTokens.toLocaleString()} (${savingsPct}% of masked results)`,
           ];
-          if (lastMaskResult?.maskedCount) {
-            const lastSaved = lastMaskResult.tokensBefore - lastMaskResult.tokensAfter;
+
+          // Provider-reported context usage (real numbers from the API)
+          const cw = ctx.model?.contextWindow;
+          if (lastProviderInputTokens != null && cw) {
+            const pct = Math.round((lastProviderInputTokens / cw) * 100);
             lines.push(
               ``,
-              `Last turn:`,
-              `  Masked: ${lastMaskResult.maskedCount} outputs`,
-              `  Saved:  ~${lastSaved.toLocaleString()} tokens`,
+              `Context (provider): ${lastProviderInputTokens.toLocaleString()} / ${cw.toLocaleString()} tokens (${pct}%)`,
             );
+          }
+
+          lines.push(
+            ``,
+            `Session savings (chars ÷ 4 estimates):`,
+            `  Outputs masked:  ${sessionStats.maskedCount}`,
+            `  Est. saved:      ~${savedTokens.toLocaleString()} tokens`,
+          );
+          if (lastMaskResult?.maskedCount) {
+            const lastSaved = lastMaskResult.tokensBefore - lastMaskResult.tokensAfter;
+            lines.push(`  Last turn saved: ~${lastSaved.toLocaleString()} tokens (${lastMaskResult.maskedCount} outputs)`);
           }
           ctx.ui.notify(lines.join("\n"), "info");
           break;
