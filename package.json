@@ -18,9 +18,9 @@
     "turndown": "^7.2.0",
     "unpdf": "^1.6.2",
     "diff": "^8.0.2",
-    "xxhash-wasm": "^1.1.0"
+    "xxhash-wasm": "^1.1.0",
+    "@earendil-works/gondolin": "0.12.0"
   },
-
   "devDependencies": {
     "@types/turndown": "^5.0.0",
     "typescript": "^5.7.0"
@@ -50,3 +50,4 @@
     ]
   }
 }
+

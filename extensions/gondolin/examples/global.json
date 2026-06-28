@@ -1,0 +1,6 @@
+{
+  "packages": ["git", "ripgrep", "fd"],
+  "setup": [
+    "curl -fsSL https://rtk.sh/install | sh"
+  ]
+}
