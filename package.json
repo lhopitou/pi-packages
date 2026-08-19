@@ -13,21 +13,23 @@
     "test": "node --test extensions/pi-om/src/**/*.test.ts"
   },
   "dependencies": {
+    "@earendil-works/gondolin": "0.12.0",
+    "diff": "^8.0.2",
     "file-type": "^21.3.0",
     "p-limit": "^6.1.0",
+    "tree-sitter-wasms": "^0.1.13",
     "turndown": "^7.2.0",
     "unpdf": "^1.6.2",
-    "diff": "^8.0.2",
-    "xxhash-wasm": "^1.1.0",
-    "@earendil-works/gondolin": "0.12.0"
+    "web-tree-sitter": "^0.20.8",
+    "xxhash-wasm": "^1.1.0"
   },
   "devDependencies": {
     "@types/turndown": "^5.0.0",
     "typescript": "^5.7.0"
   },
   "peerDependencies": {
-    "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*",
     "typebox": "*"
@@ -43,11 +45,11 @@
       "./extensions/get-system-prompt.ts",
       "./extensions/auto-memory.ts",
       "./extensions/pi-hashline-edit-pro/index.ts",
-      "./extensions/pi-om/index.ts"
+      "./extensions/pi-om/index.ts",
+      "./extensions/ast-read/index.ts"
     ],
     "skills": [
       "./skills"
     ]
   }
 }
-
