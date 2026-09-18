@@ -13,6 +13,7 @@ Personal pi extensions, agents, and tools.
 | `auto-memory` | `/save-memories` — extract corrections from session, persist to `.agents/memory.md`, auto-inject at session start |
 | `git-checkpoint` | Git stash checkpoints with undo/redo |
 | `permissions` | Permission gates for tool calls (bash, write, etc.) |
+| `pi-worktree` | Status tracking for parallel git-worktree pi agents: reporter mode inside worktree agents (status file + `●`/`✓` pane rename), `worktree_status`/`worktree_wait` tools in the main session |
 
 ## Agents
 

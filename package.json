@@ -43,6 +43,7 @@
       "./extensions/permissions/index.ts",
       "./extensions/rg-fd.ts",
       "./extensions/get-system-prompt.ts",
+      "./extensions/pi-worktree/index.ts",
       "./extensions/auto-memory.ts",
       "./extensions/pi-hashline-edit-pro/index.ts",
       "./extensions/pi-om/index.ts",
