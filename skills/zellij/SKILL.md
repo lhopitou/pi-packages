@@ -39,14 +39,21 @@ Both `new-pane` and `new-tab` print the created pane/tab ID to stdout — captur
 
 `new-pane`/`run` spawn with the zellij server's environment — the
 interactive shell's PATH and profile never run, and the command is exec'd
-directly (no shell). Launch pi through `bash -c` with fnm and pi's config
-dir re-exported; without `PI_CODING_AGENT_DIR` pi boots providerless
-(model `unknown`, "No models available"):
+directly (no shell). These vars live only in the invoking pi process (not in
+any rc file), so forward them from the invoking shell: double-quote the
+expansions (single quotes would defer to the pane, where they're unset) and
+let `env` set them in the exec'd command. Without `PI_CODING_AGENT_DIR` pi
+boots providerless (model `unknown`, "No models available"); without the
+forwarded PATH, `pi`/`node` aren't found:
 
 ```
-zellij action new-pane --name pi --cwd ~/dir -- bash -c \
-  'export PATH="$HOME/.local/share/fnm/aliases/default/bin:$PATH" PI_CODING_AGENT_DIR="$HOME/.config/pi" && exec pi'
+zellij action new-pane --name pi --cwd ~/dir -- \
+  env PI_CODING_AGENT_DIR="$PI_CODING_AGENT_DIR" PATH="$PATH" pi
 ```
+
+The values are snapshotted at spawn time — e.g. the fnm multishell bin in
+`$PATH` is a tmpfs symlink valid for the current boot, so launch panes while
+the boot/session that created them is still alive.
 
 ## Interactive testing workflow
 
