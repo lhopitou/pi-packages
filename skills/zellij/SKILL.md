@@ -35,6 +35,19 @@ Zellij is driven from the CLI: `zellij run`/`zellij action` control it whether i
 
 Both `new-pane` and `new-tab` print the created pane/tab ID to stdout — capture it: `PANE_ID=$(zellij action new-pane --name build -- cargo build)`.
 
+### Launching pi in a pane
+
+`new-pane`/`run` spawn with the zellij server's environment — the
+interactive shell's PATH and profile never run, and the command is exec'd
+directly (no shell). Launch pi through `bash -c` with fnm and pi's config
+dir re-exported; without `PI_CODING_AGENT_DIR` pi boots providerless
+(model `unknown`, "No models available"):
+
+```
+zellij action new-pane --name pi --cwd ~/dir -- bash -c \
+  'export PATH="$HOME/.local/share/fnm/aliases/default/bin:$PATH" PI_CODING_AGENT_DIR="$HOME/.config/pi" && exec pi'
+```
+
 ## Interactive testing workflow
 
 The blocking flags turn zellij into a test harness with human-in-the-loop retry:
