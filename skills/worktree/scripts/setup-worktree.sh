@@ -6,6 +6,16 @@
 # Reads <main-checkout-root>/.pi/worktrees.json:
 #   { "copy": [".env"], "symlink": ["node_modules"], "post_create": ["npm install"] }
 #
+# copy/symlink entries are gitignore-style globs, expanded relative to the
+# main checkout (e.g. ".env.*" matches .env.local, .env.production, ...).
+# Literal paths still work: a plain name only matches itself.
+# Supported wildcards: * ? [class] and ** (recursive, e.g. "**/*.log").
+# A trailing / (gitignore's dir-only marker) is stripped; "dir/**" means the
+# contents of dir (the bare dir itself is not matched, per gitignore).
+# Leading / and ! negation are NOT supported (patterns are already anchored
+# at the checkout root). Like gitignore, * and ** do not match dotfiles
+# unless the pattern literally starts with a dot.
+#
 # When no config file exists, applies defaults:
 #   copy .env if it exists, symlink node_modules if it exists.
 #
@@ -18,6 +28,8 @@ set -euo pipefail
 
 MAIN="${1:?usage: setup-worktree.sh <main-checkout-root> <worktree-path>}"
 WT="${2:?usage: setup-worktree.sh <main-checkout-root> <worktree-path>}"
+
+WTREAL=$(realpath -m "$WT")
 
 CONFIG="$MAIN/.pi/worktrees.json"
 
@@ -47,19 +59,57 @@ else
 fi | while IFS=$'\t' read -r op src; do
   case "$op" in
     copy)
-      if [ -e "$MAIN/$src" ]; then
-        mkdir -p "$WT/$(dirname "$src")"
-        cp -Rp "$MAIN/$src" "$WT/$src"
-        echo "copied: $src"
+      # Expand the entry as a glob relative to MAIN; a literal entry only
+      # matches itself, so exact paths keep working. globstar enables the
+      # recursive ** wildcard; compgen -G prints one match per line and
+      # exits non-zero (empty output) when nothing matches.
+      pat=${src%/}
+      # gitignore's "dir/**" means the contents of dir; globstar also
+      # matches the bare dir itself, so track it (pre) and drop that match.
+      case $pat in *'/**') pre=${pat%'/**'} ;; *) pre= ;; esac
+      matches=$(cd "$MAIN" && shopt -s globstar && compgen -G "$pat" || true)
+      if [ -n "$matches" ]; then
+        while IFS= read -r m; do
+          [ -n "$m" ] || continue
+          m=${m%/}   # globstar "dir/**" can yield a bare "dir/" match
+          if [ "$m" = "$pre" ]; then continue; fi
+          d="$WT/$(dirname "$m")"
+          # Guard: if an ancestor of the target resolves outside the
+          # worktree (e.g. an earlier symlink points into MAIN), cp here
+          # would clobber files in the main checkout — skip instead.
+          case "$(realpath -m "$d")" in
+            "$WTREAL"|"$WTREAL"/*) ;;
+            *) echo "WARNING: path resolves outside worktree (ancestor symlink into main?), skipped: $m" >&2; continue ;;
+          esac
+          mkdir -p "$d"
+          cp -Rp "$MAIN/$m" "$WT/$m"
+          echo "copied: $m"
+        done <<< "$matches"
       else
         echo "WARNING: copy source missing, skipped: $src" >&2
       fi
       ;;
     symlink)
-      if [ -e "$MAIN/$src" ]; then
-        mkdir -p "$WT/$(dirname "$src")"
-        ln -sfn "$MAIN/$src" "$WT/$src"
-        echo "symlinked: $src -> $MAIN/$src"
+      pat=${src%/}
+      case $pat in *'/**') pre=${pat%'/**'} ;; *) pre= ;; esac
+      matches=$(cd "$MAIN" && shopt -s globstar && compgen -G "$pat" || true)
+      if [ -n "$matches" ]; then
+        while IFS= read -r m; do
+          [ -n "$m" ] || continue
+          m=${m%/}
+          if [ "$m" = "$pre" ]; then continue; fi
+          d="$WT/$(dirname "$m")"
+          # Guard: without this, "symlink": ["logs", "logs/**"] would first
+          # symlink logs -> MAIN/logs, then ln through it, replacing files
+          # IN the main checkout with self-referential symlinks.
+          case "$(realpath -m "$d")" in
+            "$WTREAL"|"$WTREAL"/*) ;;
+            *) echo "WARNING: symlink path resolves outside worktree (ancestor symlink into main?), skipped: $m" >&2; continue ;;
+          esac
+          mkdir -p "$d"
+          ln -sfn "$MAIN/$m" "$WT/$m"
+          echo "symlinked: $m -> $MAIN/$m"
+        done <<< "$matches"
       else
         echo "WARNING: symlink source missing, skipped: $src" >&2
       fi
