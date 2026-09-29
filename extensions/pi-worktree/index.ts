@@ -16,10 +16,7 @@
  * deleted by the merge/remove workflow.
  */
 
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import { SessionManager, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { execFile } from "node:child_process";
@@ -47,6 +44,8 @@ interface WorktreeStatus {
   paneTarget: string | null;
   /** Multiplexer session name. */
   session: string | null;
+  /** Path to the agent's session JSONL (set at session_start). */
+  sessionFile: string | null;
   startedAt: number;
   updatedAt: number;
 }
@@ -133,6 +132,7 @@ function registerReporter(pi: ExtensionAPI) {
     mux,
     paneTarget,
     session: process.env.ZELLIJ_SESSION_NAME ?? null,
+    sessionFile: null,
     startedAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -229,7 +229,8 @@ function registerReporter(pi: ExtensionAPI) {
     return false;
   }
 
-  pi.on("session_start", async () => {
+  pi.on("session_start", async (_event, ctx) => {
+    status.sessionFile = ctx.sessionManager.getSessionFile() ?? null;
     if (mux === "tmux" && paneTarget && !status.session) {
       status.session =
         (await run("tmux", [
@@ -304,11 +305,12 @@ function readAgents(statusDir: string): AgentInfo[] {
 async function findStatusDir(): Promise<{
   dir: string | null;
   root: string | null;
+  expected: string | null;
 }> {
   const root = await run("git", ["rev-parse", "--show-toplevel"]);
-  if (!root) return { dir: null, root: null };
-  const dir = join(dirname(root), `${basename(root)}__worktrees`, ".status");
-  return { dir: existsSync(dir) ? dir : null, root };
+  if (!root) return { dir: null, root: null, expected: null };
+  const expected = join(dirname(root), `${basename(root)}__worktrees`, ".status");
+  return { dir: existsSync(expected) ? expected : null, root, expected };
 }
 
 function formatAgent(a: AgentInfo): string {
@@ -331,6 +333,97 @@ function formatAgent(a: AgentInfo): string {
         ? " — INTERRUPTED (aborted, awaiting user input)"
         : "";
   return `${a.handle}: ${a.effective} (${ageStr} old; ${bits})${note}`;
+}
+
+// ── worktree_message helpers ───────────────────────────────────────────
+
+interface AssistantSnapshot {
+  text: string;
+  timestamp: string;
+  model: string;
+  stopReason: string;
+}
+
+/**
+ * Read the last `count` assistant messages that carry text from a session
+ * JSONL, scanning backwards. Skips malformed lines (partial writes) and
+ * tool-call-only assistant messages.
+ */
+function readAssistantMessages(
+  sessionFile: string,
+  count: number,
+): AssistantSnapshot[] {
+  let content: string;
+  try {
+    content = readFileSync(sessionFile, "utf8");
+  } catch {
+    return [];
+  }
+  const lines = content.split("\n");
+  const out: AssistantSnapshot[] = [];
+  for (let i = lines.length - 1; i >= 0 && out.length < count; i--) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    let entry: {
+      type?: string;
+      timestamp?: string;
+      message?: {
+        role?: string;
+        content?: Array<{ type?: string; text?: string }>;
+        provider?: string;
+        model?: string;
+        stopReason?: string;
+      };
+    };
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue; // partial write — skip
+    }
+    if (entry?.type !== "message") continue;
+    const message = entry.message;
+    if (message?.role !== "assistant") continue;
+    const text = (message.content ?? [])
+      .filter((c) => c?.type === "text")
+      .map((c) => c.text ?? "")
+      .join("\n")
+      .trim();
+    if (!text) continue; // tool-call-only assistant message
+    out.push({
+      text,
+      timestamp: entry.timestamp ?? "",
+      model: `${message.provider ?? "?"}/${message.model ?? "?"}`,
+      stopReason: message.stopReason ?? "?",
+    });
+  }
+  return out.reverse(); // oldest first
+}
+
+/**
+ * Resolve the session file for an agent. Uses the sessionFile recorded in its
+ * status file; falls back to the most recent session for the worktree cwd
+ * (covers agents spawned before sessionFile tracking, or removed files).
+ */
+async function resolveSessionFile(
+  agent: AgentInfo,
+  statusDir: string,
+): Promise<string | null> {
+  if (agent.status.sessionFile && existsSync(agent.status.sessionFile)) {
+    return agent.status.sessionFile;
+  }
+  const worktreeCwd = join(dirname(statusDir), agent.handle);
+  try {
+    const sessions = await SessionManager.list(worktreeCwd);
+    if (sessions.length) {
+      sessions.sort(
+        (a, b) => b.modified.getTime() - a.modified.getTime(),
+      );
+      return sessions[0].path;
+    }
+  } catch {
+    // Best-effort fallback: no session directory for this worktree.
+  }
+  return null;
 }
 
 // ── worktree_wait rendering (bash-style) ───────────────────────────────
@@ -368,7 +461,7 @@ function registerCoordinator(pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const { dir, root } = await findStatusDir();
+      const { dir, root, expected } = await findStatusDir();
       if (!root) {
         return {
           content: [
@@ -385,7 +478,7 @@ function registerCoordinator(pi: ExtensionAPI) {
           content: [
             {
               type: "text",
-              text: `No worktree agents (no status dir at ${dir}).`,
+              text: `No worktree agents (no status dir at ${expected}).`,
             },
           ],
           details: {},
@@ -430,6 +523,129 @@ function registerCoordinator(pi: ExtensionAPI) {
       return {
         content: [{ type: "text", text: agents.map(formatAgent).join("\n") }],
         details: {},
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "worktree_message",
+    label: "Worktree agent message",
+    description:
+      "Read the latest assistant message(s) from a worktree agent's session file. " +
+      "Works for working, done, crashed, and interrupted agents. Use to review " +
+      "agent output instead of capturing the multiplexer pane.",
+    promptSnippet:
+      "Read the latest assistant message(s) from a worktree agent's session",
+    parameters: Type.Object({
+      handle: Type.String({ description: "Worktree agent handle." }),
+      count: Type.Optional(
+        Type.Number({
+          description: "Number of recent assistant messages to return. Default: 1.",
+        }),
+      ),
+    }),
+    renderCall(args, theme, context) {
+      const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+      let content =
+        theme.fg("toolTitle", theme.bold("worktree_message ")) +
+        theme.fg("toolTitle", args.handle ?? "...");
+      if (args.count !== undefined) {
+        content += theme.fg("muted", ` (last ${args.count})`);
+      }
+      text.setText(content);
+      return text;
+    },
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      const { dir, root, expected } = await findStatusDir();
+      if (!root) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Not inside a git repository — cannot resolve worktree status dir.",
+            },
+          ],
+          details: {},
+        };
+      }
+      if (!dir) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `No worktree agents (no status dir at ${expected}).`,
+            },
+          ],
+          details: {},
+        };
+      }
+      const agents = readAgents(dir);
+      const agent = agents.find((a) => a.handle === params.handle);
+      if (!agent) {
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `Unknown handle: ${params.handle}\n` +
+                `Known handles: ${
+                  agents.map((a) => a.handle).join(", ") || "(none)"
+                }`,
+            },
+          ],
+          details: {},
+        };
+      }
+
+      const count = Math.max(1, Math.floor(params.count ?? 1));
+      const sessionFile = await resolveSessionFile(agent, dir);
+      if (!sessionFile) {
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `No session file found for ${agent.handle} (no sessionFile in ` +
+                `status and no sessions for its worktree directory). The agent ` +
+                `may not have started yet, or its session is ephemeral.`,
+            },
+          ],
+          details: { handle: agent.handle, effective: agent.effective },
+        };
+      }
+
+      const messages = readAssistantMessages(sessionFile, count);
+      if (!messages.length) {
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `No assistant messages yet in ${agent.handle}'s session ` +
+                `(state: ${agent.effective}). The agent may still be starting ` +
+                `or has only emitted tool calls so far.`,
+            },
+          ],
+          details: { handle: agent.handle, sessionFile, effective: agent.effective },
+        };
+      }
+
+      const blocks = messages.map((m) => m.text);
+      const header =
+        messages.length === 1
+          ? `wt-${agent.handle} — last assistant message (state: ${agent.effective}):`
+          : `wt-${agent.handle} — ${messages.length} most recent assistant messages (state: ${agent.effective}), oldest first:`;
+      return {
+        content: [
+          { type: "text", text: `${header}\n\n${blocks.join("\n\n────\n\n")}` },
+        ],
+        details: {
+          handle: agent.handle,
+          sessionFile,
+          effective: agent.effective,
+          stopReason: messages[messages.length - 1].stopReason,
+          count: messages.length,
+        },
       };
     },
   });
@@ -506,13 +722,19 @@ function registerCoordinator(pi: ExtensionAPI) {
     renderResult(result, options, theme, context) {
       const state = context.state as WaitRenderState;
       if (!options.isPartial || context.isError) {
-        if (state.startedAt !== undefined) state.endedAt ??= Date.now();
         if (state.interval) {
           clearInterval(state.interval);
           state.interval = undefined;
         }
-        // Freeze the header's timer at the final duration.
-        context.invalidate();
+        if (state.startedAt !== undefined && state.endedAt === undefined) {
+          state.endedAt = Date.now();
+          // Freeze the header's timer at the final duration with one extra
+          // render pass. Deferred because context.invalidate() synchronously
+          // re-enters updateDisplay() mid-render: called inline it recursed
+          // until the stack overflowed and stacked one copy of the result
+          // component per level, printing the timeout message many times.
+          queueMicrotask(() => context.invalidate());
+        }
       }
       const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
       const output = result.content
