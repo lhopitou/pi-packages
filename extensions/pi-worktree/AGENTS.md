@@ -40,6 +40,7 @@ automatically; your main sessions run in coordinator mode.
   "mux": "zellij | tmux | null",
   "paneTarget": "terminal_12 | %3 | null",
   "session": "myproject | null",
+  "sessionFile": "/home/.../sessions/--...--/....jsonl | null",
   "startedAt": 1710000000000,
   "updatedAt": 1710000123000
 }
@@ -72,11 +73,18 @@ automatically; your main sessions run in coordinator mode.
   per-handle outcomes.
   `any: true` returns on the first settled agent (review-and-merge-one-at-a-time
   pattern). Default timeout 3600s. Aborting the tool call returns a summary.
+- `worktree_message(handle, count?)` — reads the latest assistant message(s)
+  from the agent's session JSONL (path recorded in the status file's
+  `sessionFile` field, set at `session_start`). Works for working, done,
+  crashed, and interrupted agents — the file survives the process. Falls back
+  to the most recent session for the worktree cwd when `sessionFile` is
+  missing (agents spawned before the field existed).
 
-Send/capture to an agent stays bash + multiplexer (`zellij action paste` /
-`dump-screen`, `tmux send-keys` / `capture-pane`), targeting the `paneTarget`
-recorded in the status file. See the `zellij`, `tmux`, and `coordinator`
-skills.
+Sending input to an agent stays bash + multiplexer (`zellij action paste` /
+`tmux send-keys`), targeting the `paneTarget` recorded in the status file.
+Capturing output should use `worktree_message` — pane dumps
+(`dump-screen` / `capture-pane`) are a debugging fallback only. See the
+`zellij`, `tmux`, and `coordinator` skills.
 
 ## Related skills
 

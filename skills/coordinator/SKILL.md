@@ -86,9 +86,19 @@ requires user input.
 
 ### Capture Output
 
-Read an agent's terminal to review what it did. The pane target comes from
-`worktree_status` (the `mux:paneTarget` field, e.g. `zellij:terminal_12` or
-`tmux:%3`).
+Use the `worktree_message` tool to review what an agent did — it reads the
+agent's final assistant message straight from its session file, so it works
+for working, done, crashed, and interrupted agents:
+
+```text
+worktree_message { handle: "<handle>" }              // latest assistant message
+worktree_message { handle: "<handle>", count: 3 }     // last few, oldest first
+```
+
+The pane dump commands below are a debugging fallback only (e.g. the agent
+never produced a session, or you need to see terminal output like a crashed
+process). The pane target comes from `worktree_status` (the `mux:paneTarget`
+field, e.g. `zellij:terminal_12` or `tmux:%3`).
 
 **zellij:**
 
@@ -103,9 +113,6 @@ zellij action dump-screen --full --pane-id <paneTarget>     # + scrollback
 tmux capture-pane -p -t <paneTarget>            # viewport
 tmux capture-pane -p -S -300 -t <paneTarget>    # + scrollback
 ```
-
-Output is plain text. Read the last ~200 lines; look at the agent's final
-summary, not the whole transcript.
 
 ### Send Instructions
 
