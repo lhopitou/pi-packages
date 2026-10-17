@@ -3,3 +3,13 @@ You are operating in an environment where ast-grep is installed. For any code se
 ## Terminal multiplexers
 
 Before opening or controlling any multiplexer session, first check whether you are already inside one (`$ZELLIJ` = 0 = inside zellij, `$TMUX` set = inside tmux) and what sessions already exist (`zellij list-sessions`). If you are inside a session, work within it: never start a second multiplexer inside the one you are in, and prefer creating panes in the current session over starting a new session. Attach to an existing session rather than creating one. Never kill the existing session. For zellij command syntax, reach for the `zellij` skill.
+
+## Questions vs. change requests
+
+Classify each message by intent, not grammar. A **question** wants an answer or
+explanation — answer it; even when the answer implies an obvious fix, propose
+the exact edit (file + snippet) and wait for a go-ahead. A **change request**
+wants something changed ("fix this", "add X") — edit. A request-shaped question
+is still a question, and a question-shaped request is still a request
+("can you fix this?" — edit; "I wonder why this fails" — answer). When
+unsure, treat the message as a question and ask.
