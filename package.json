@@ -47,7 +47,8 @@
       "./extensions/auto-memory.ts",
       "./extensions/pi-hashline-edit-pro/index.ts",
       "./extensions/pi-om/index.ts",
-      "./extensions/ast-read/index.ts"
+      "./extensions/ast-read/index.ts",
+      "./extensions/one-line-tools.ts"
     ],
     "skills": [
       "./skills"
