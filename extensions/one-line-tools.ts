@@ -60,6 +60,11 @@
  * The block renders its own shell (`renderShell: "self"`): core then applies
  * neither background nor padding, so the collapsed line can sit on the page
  * background, and the other modes reproduce the regular block themselves.
+ * The shell supplies every vertical blank row itself, so a wrapped renderer
+ * component that pads itself (edit's call box is a `Box(…, 1)`) has that
+ * padding stripped — core's own shell doubles those rows on edit blocks,
+ * one blank line too many above and below, and the reproductions here do
+ * not.
  *
  * Applies to every tool — built-in, extension, and MCP — by wrapping whatever
  * renderer the tool would otherwise use.
@@ -313,6 +318,21 @@ function blockShell(
   return box;
 }
 
+/**
+ * Zero a wrapped renderer component's own vertical padding: the shell
+ * supplies the block's blank rows, and a component that pads itself too
+ * (edit's call box) would double them. Only the padding is touched, and the
+ * change is safe wherever the component is framed: any shell that could
+ * render it supplies these rows itself.
+ */
+function stripSelfPad(component: Component | undefined): void {
+  const padded = component as { paddingY?: number } | undefined;
+  if (padded === undefined || typeof padded.paddingY !== "number") return;
+  if (padded.paddingY <= 0) return;
+  padded.paddingY = 0;
+  component?.invalidate?.();
+}
+
 /** Call title for tools without a default renderer: name plus a short argument dump. */
 function callFallbackTitle(
   toolName: string,
@@ -455,6 +475,7 @@ export default function toolOutputModesExtension(pi: ExtensionAPI) {
           lastComponent: state.callComp,
         });
         if (component) state.callComp = component;
+        stripSelfPad(component);
         return blockShell(
           component ?? callFallbackTitle(toolName, args, theme),
           context.outputPad,
@@ -486,6 +507,7 @@ export default function toolOutputModesExtension(pi: ExtensionAPI) {
             { ...context, lastComponent: state.resultComp },
           );
           if (component) state.resultComp = component;
+          stripSelfPad(component);
           return component === undefined
             ? undefined
             : blockShell(component, outputPad, status, theme, false, true);
