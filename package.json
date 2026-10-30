@@ -48,7 +48,8 @@
       "./extensions/pi-hashline-edit-pro/index.ts",
       "./extensions/pi-om/index.ts",
       "./extensions/ast-read/index.ts",
-      "./extensions/one-line-tools.ts"
+      "./extensions/one-line-tools.ts",
+      "./extensions/rm-tmp.ts"
     ],
     "skills": [
       "./skills"
