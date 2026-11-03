@@ -36,19 +36,14 @@
   },
   "pi": {
     "extensions": [
-      "./extensions/pi-web-access/index.ts",
-      "./extensions/pi-subagent/index.ts",
-      "./extensions/scopy.ts",
-      "./extensions/git-checkpoint.ts",
-      "./extensions/permissions/index.ts",
-      "./extensions/rg-fd.ts",
-      "./extensions/get-system-prompt.ts",
-      "./extensions/pi-worktree/index.ts",
-      "./extensions/auto-memory.ts",
-      "./extensions/pi-hashline-edit-pro/index.ts",
-      "./extensions/pi-om/index.ts",
       "./extensions/ast-read/index.ts",
+      "./extensions/describe-image.ts",
+      "./extensions/get-system-prompt.ts",
+      "./extensions/git-checkpoint.ts",
       "./extensions/one-line-tools.ts",
+      "./extensions/permissions/index.ts",
+      "./extensions/pi-delegate/index.ts",
+      "./extensions/pi-worktree/index.ts",
       "./extensions/rm-tmp.ts"
     ],
     "skills": [
