@@ -36,18 +36,12 @@
   },
   "pi": {
     "extensions": [
-      "./extensions/ast-read/index.ts",
-      "./extensions/describe-image.ts",
-      "./extensions/get-system-prompt.ts",
-      "./extensions/git-checkpoint.ts",
-      "./extensions/one-line-tools.ts",
-      "./extensions/permissions/index.ts",
-      "./extensions/pi-delegate/index.ts",
-      "./extensions/pi-worktree/index.ts",
-      "./extensions/rm-tmp.ts"
+      "./extensions/*.ts",
+      "./extensions/*/index.ts"
     ],
     "skills": [
       "./skills"
-    ]
+    ],
+    "prompts": ["./prompts/"]
   }
 }
