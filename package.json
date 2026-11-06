@@ -8,9 +8,7 @@
   ],
   "private": true,
   "scripts": {
-    "clean": "rm -rf extensions/pi-web-access/node_modules",
-    "check": "tsc --noEmit",
-    "test": "node --test extensions/pi-om/src/**/*.test.ts"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@earendil-works/gondolin": "0.12.0",

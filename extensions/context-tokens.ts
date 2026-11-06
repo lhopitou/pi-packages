@@ -199,8 +199,6 @@ function renderLines(
 	if (modelLabel) {
 		lines.push(`Model: ${modelLabel}`);
 	}
-	lines.push("");
-	lines.push("Estimates: pi's chars/4 heuristic (conservative); no provider token counts.");
 	return lines;
 }
 
