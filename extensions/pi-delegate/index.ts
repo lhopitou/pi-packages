@@ -481,8 +481,7 @@ export default async function delegateExtension(pi: ExtensionAPI) {
       let timedOut = false;
       let aborted = false;
       let child:
-        | Awaited<ReturnType<typeof createAgentSession>>["session"]
-        | undefined;
+        Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
       let timer: ReturnType<typeof setTimeout> | undefined;
       let unsubscribe: (() => void) | undefined;
       let removeAbortListener: (() => void) | undefined;

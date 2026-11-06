@@ -1,4 +1,7 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
@@ -287,29 +290,114 @@ function saveConfig(config: PermissionConfig, configDir: string): void {
 
 const DEFAULT_RULES: PermissionRule[] = [
   // Dangerous bash commands
-  { tool: "bash", pattern: "\\brm\\s+(-rf?|--recursive)\\b", action: "ask", description: "Recursive delete" },
-  { tool: "bash", pattern: "\\bsudo\\b", action: "ask", description: "Privilege escalation" },
-  { tool: "bash", pattern: "\\b(chmod|chown)\\b.*777", action: "ask", description: "World-writable permissions" },
-  { tool: "bash", pattern: "\\bdd\\s+if=", action: "ask", description: "Direct disk operations" },
-  { tool: "bash", pattern: "\\bmkfs\\b", action: "deny", description: "Format filesystem" },
-  { tool: "bash", pattern: "\\b(ssh|scp|rsync)\\b", action: "ask", description: "Remote access" },
-  { tool: "bash", pattern: "\\bcurl\\b.*\\|\\s*(ba)?sh", action: "deny", description: "Pipe remote script to shell" },
-  { tool: "bash", pattern: "\\bwget\\b.*\\|\\s*(ba)?sh", action: "deny", description: "Pipe remote download to shell" },
-  { tool: "bash", pattern: ">/dev/(sd|nvme|vd)", action: "deny", description: "Write directly to block device" },
+  {
+    tool: "bash",
+    pattern: "\\brm\\s+(-rf?|--recursive)\\b",
+    action: "ask",
+    description: "Recursive delete",
+  },
+  {
+    tool: "bash",
+    pattern: "\\bsudo\\b",
+    action: "ask",
+    description: "Privilege escalation",
+  },
+  {
+    tool: "bash",
+    pattern: "\\b(chmod|chown)\\b.*777",
+    action: "ask",
+    description: "World-writable permissions",
+  },
+  {
+    tool: "bash",
+    pattern: "\\bdd\\s+if=",
+    action: "ask",
+    description: "Direct disk operations",
+  },
+  {
+    tool: "bash",
+    pattern: "\\bmkfs\\b",
+    action: "deny",
+    description: "Format filesystem",
+  },
+  {
+    tool: "bash",
+    pattern: "\\b(ssh|scp|rsync)\\b",
+    action: "ask",
+    description: "Remote access",
+  },
+  {
+    tool: "bash",
+    pattern: "\\bcurl\\b.*\\|\\s*(ba)?sh",
+    action: "deny",
+    description: "Pipe remote script to shell",
+  },
+  {
+    tool: "bash",
+    pattern: "\\bwget\\b.*\\|\\s*(ba)?sh",
+    action: "deny",
+    description: "Pipe remote download to shell",
+  },
+  {
+    tool: "bash",
+    pattern: ">/dev/(sd|nvme|vd)",
+    action: "deny",
+    description: "Write directly to block device",
+  },
 
   // Network exfiltration vectors (catches piped variants via segment analysis)
-  { tool: "bash", pattern: "\\b(nc|ncat|netcat|socat)\\b", action: "ask", description: "Network connection tool (potential exfiltration)" },
-  { tool: "bash", pattern: "\\b(aws|gcloud|az)\\s+\\w+\\s+download\\b", action: "ask", description: "Cloud CLI data download" },
+  {
+    tool: "bash",
+    pattern: "\\b(nc|ncat|netcat|socat)\\b",
+    action: "ask",
+    description: "Network connection tool (potential exfiltration)",
+  },
+  {
+    tool: "bash",
+    pattern: "\\b(aws|gcloud|az)\\s+\\w+\\s+download\\b",
+    action: "ask",
+    description: "Cloud CLI data download",
+  },
 
   // Reverse shell patterns
-  { tool: "bash", pattern: "/dev/tcp/", action: "deny", description: "Bash /dev/tcp reverse shell" },
-  { tool: "bash", pattern: "/dev/udp/", action: "deny", description: "Bash /dev/udp reverse shell" },
+  {
+    tool: "bash",
+    pattern: "/dev/tcp/",
+    action: "deny",
+    description: "Bash /dev/tcp reverse shell",
+  },
+  {
+    tool: "bash",
+    pattern: "/dev/udp/",
+    action: "deny",
+    description: "Bash /dev/udp reverse shell",
+  },
 
   // Protected file paths
-  { tool: "write", pattern: "**/.env*", action: "ask", description: "Environment files" },
-  { tool: "write", pattern: "**/.git/**", action: "ask", description: "Git internals" },
-  { tool: "edit", pattern: "**/.env*", action: "ask", description: "Environment files" },
-  { tool: "edit", pattern: "**/.git/**", action: "ask", description: "Git internals" },
+  {
+    tool: "write",
+    pattern: "**/.env*",
+    action: "ask",
+    description: "Environment files",
+  },
+  {
+    tool: "write",
+    pattern: "**/.git/**",
+    action: "ask",
+    description: "Git internals",
+  },
+  {
+    tool: "edit",
+    pattern: "**/.env*",
+    action: "ask",
+    description: "Environment files",
+  },
+  {
+    tool: "edit",
+    pattern: "**/.git/**",
+    action: "ask",
+    description: "Git internals",
+  },
 ];
 
 // ─── Decision key helpers ───────────────────────────────────────────────────
@@ -362,7 +450,12 @@ export default function permissionsExtension(pi: ExtensionAPI) {
     tool: string,
     target: string,
     ctx: ExtensionContext,
-  ): Promise<{ action: PermissionAction; rule?: PermissionRule; blocked?: boolean; reason?: string }> {
+  ): Promise<{
+    action: PermissionAction;
+    rule?: PermissionRule;
+    blocked?: boolean;
+    reason?: string;
+  }> {
     const rules = getEffectiveRules();
 
     // For bash commands, also check each segment independently.
@@ -383,8 +476,13 @@ export default function permissionsExtension(pi: ExtensionAPI) {
               // Invalid regex, skip
             }
 
-            if (segmentMatched && (rule.action === "ask" || rule.action === "deny")) {
-              const operatorCtx = segment.operator ? ` (after ${segment.operator})` : "";
+            if (
+              segmentMatched &&
+              (rule.action === "ask" || rule.action === "deny")
+            ) {
+              const operatorCtx = segment.operator
+                ? ` (after ${segment.operator})`
+                : "";
               const label = rule.description ?? rule.pattern;
               const reason = `Piped/chained command${operatorCtx} segment matched rule "${label}": ${segment.text}`;
 
@@ -397,7 +495,12 @@ export default function permissionsExtension(pi: ExtensionAPI) {
 
               // rule.action === "ask"
               if (!ctx.hasUI) {
-                return { action: "deny", rule, blocked: true, reason: `${reason} (no UI for confirmation)` };
+                return {
+                  action: "deny",
+                  rule,
+                  blocked: true,
+                  reason: `${reason} (no UI for confirmation)`,
+                };
               }
 
               const choice = await ctx.ui.select(
@@ -410,18 +513,44 @@ export default function permissionsExtension(pi: ExtensionAPI) {
               }
               if (choice === "Allow for session") {
                 const key = decisionKey(tool, rule.pattern, target);
-                sessionDecisions.set(key, { key, action: "allow", timestamp: Date.now() });
-                pi.appendEntry("permission-decision", { key, action: "allow", timestamp: Date.now() });
+                sessionDecisions.set(key, {
+                  key,
+                  action: "allow",
+                  timestamp: Date.now(),
+                });
+                pi.appendEntry("permission-decision", {
+                  key,
+                  action: "allow",
+                  timestamp: Date.now(),
+                });
                 return { action: "allow", rule };
               }
               // Deny (piped segment)
-              const customReason = await ctx.ui.input("Reason for denying (optional):", "");
+              const customReason = await ctx.ui.input(
+                "Reason for denying (optional):",
+                "",
+              );
               const baseReason = `Denied by user: ${reason}`;
-              const finalReason = customReason?.trim() ? `${baseReason} — ${customReason.trim()}` : baseReason;
+              const finalReason = customReason?.trim()
+                ? `${baseReason} — ${customReason.trim()}`
+                : baseReason;
               const key = decisionKey(tool, rule.pattern, target);
-              sessionDecisions.set(key, { key, action: "deny", timestamp: Date.now() });
-              pi.appendEntry("permission-decision", { key, action: "deny", timestamp: Date.now() });
-              return { action: "deny", rule, blocked: true, reason: finalReason };
+              sessionDecisions.set(key, {
+                key,
+                action: "deny",
+                timestamp: Date.now(),
+              });
+              pi.appendEntry("permission-decision", {
+                key,
+                action: "deny",
+                timestamp: Date.now(),
+              });
+              return {
+                action: "deny",
+                rule,
+                blocked: true,
+                reason: finalReason,
+              };
             }
           }
         }
@@ -450,10 +579,15 @@ export default function permissionsExtension(pi: ExtensionAPI) {
         // Check session memory first
         const key = decisionKey(tool, rule.pattern, target);
         const remembered = sessionDecisions.get(key);
-        if (remembered && (Date.now() - remembered.timestamp) < 3600_000) {
+        if (remembered && Date.now() - remembered.timestamp < 3600_000) {
           // Use remembered decision if less than 1 hour old
           if (remembered.action === "deny") {
-            return { action: "deny", rule, blocked: true, reason: `Blocked by rule: ${rule.description ?? rule.pattern}` };
+            return {
+              action: "deny",
+              rule,
+              blocked: true,
+              reason: `Blocked by rule: ${rule.description ?? rule.pattern}`,
+            };
           }
           if (remembered.action === "allow") {
             return { action: "allow", rule };
@@ -466,21 +600,35 @@ export default function permissionsExtension(pi: ExtensionAPI) {
 
         if (rule.action === "deny") {
           if (ctx.hasUI) {
-            ctx.ui.notify(`⛔ Blocked: ${rule.description ?? rule.pattern}`, "warning");
+            ctx.ui.notify(
+              `⛔ Blocked: ${rule.description ?? rule.pattern}`,
+              "warning",
+            );
           }
-          return { action: "deny", rule, blocked: true, reason: `Blocked by rule: ${rule.description ?? rule.pattern}` };
+          return {
+            action: "deny",
+            rule,
+            blocked: true,
+            reason: `Blocked by rule: ${rule.description ?? rule.pattern}`,
+          };
         }
 
         if (rule.action === "ask") {
           if (!ctx.hasUI) {
             // Non-interactive: deny by default for safety
-            return { action: "deny", rule, blocked: true, reason: `Rule requires confirmation (no UI): ${rule.description ?? rule.pattern}` };
+            return {
+              action: "deny",
+              rule,
+              blocked: true,
+              reason: `Rule requires confirmation (no UI): ${rule.description ?? rule.pattern}`,
+            };
           }
 
           const label = rule.description ?? rule.pattern;
-          const prompt = tool === "bash"
-            ? `⚠️ ${label}\n\nCommand: ${target}`
-            : `⚠️ ${label}\n\nPath: ${target}`;
+          const prompt =
+            tool === "bash"
+              ? `⚠️ ${label}\n\nCommand: ${target}`
+              : `⚠️ ${label}\n\nPath: ${target}`;
 
           const choice = await ctx.ui.select(prompt, [
             "Allow once",
@@ -492,22 +640,48 @@ export default function permissionsExtension(pi: ExtensionAPI) {
             return { action: "allow", rule };
           }
           if (choice === "Allow for session") {
-            sessionDecisions.set(key, { key, action: "allow", timestamp: Date.now() });
+            sessionDecisions.set(key, {
+              key,
+              action: "allow",
+              timestamp: Date.now(),
+            });
             // Also persist to session
-            pi.appendEntry("permission-decision", { key, action: "allow", timestamp: Date.now() });
+            pi.appendEntry("permission-decision", {
+              key,
+              action: "allow",
+              timestamp: Date.now(),
+            });
             return { action: "allow", rule };
           }
           // Deny
           if (choice === "Deny") {
-            sessionDecisions.set(key, { key, action: "deny", timestamp: Date.now() });
-            pi.appendEntry("permission-decision", { key, action: "deny", timestamp: Date.now() });
-            const customReason = await ctx.ui.input("Reason for denying (optional):", "");
+            sessionDecisions.set(key, {
+              key,
+              action: "deny",
+              timestamp: Date.now(),
+            });
+            pi.appendEntry("permission-decision", {
+              key,
+              action: "deny",
+              timestamp: Date.now(),
+            });
+            const customReason = await ctx.ui.input(
+              "Reason for denying (optional):",
+              "",
+            );
             const baseReason = `Denied by user: ${rule.description ?? rule.pattern}`;
-            const reason = customReason?.trim() ? `${baseReason} — ${customReason.trim()}` : baseReason;
+            const reason = customReason?.trim()
+              ? `${baseReason} — ${customReason.trim()}`
+              : baseReason;
             return { action: "deny", rule, blocked: true, reason };
           }
           // Fallback (select cancelled or unknown choice)
-          return { action: "deny", rule, blocked: true, reason: `Denied by user: ${rule.description ?? rule.pattern}` };
+          return {
+            action: "deny",
+            rule,
+            blocked: true,
+            reason: `Denied by user: ${rule.description ?? rule.pattern}`,
+          };
         }
       }
     }
@@ -515,7 +689,11 @@ export default function permissionsExtension(pi: ExtensionAPI) {
     // No rule matched: use default
     const defaultAction = getDefaultAction(tool);
     if (defaultAction === "deny") {
-      return { action: "deny", blocked: true, reason: `Default deny for tool: ${tool}` };
+      return {
+        action: "deny",
+        blocked: true,
+        reason: `Default deny for tool: ${tool}`,
+      };
     }
     if (defaultAction === "ask") {
       if (!ctx.hasUI) {
@@ -528,16 +706,29 @@ export default function permissionsExtension(pi: ExtensionAPI) {
       if (choice === "Allow once") return { action: "allow" };
       if (choice === "Allow for session") {
         const key = decisionKey(tool, "__default__", target);
-        sessionDecisions.set(key, { key, action: "allow", timestamp: Date.now() });
+        sessionDecisions.set(key, {
+          key,
+          action: "allow",
+          timestamp: Date.now(),
+        });
         return { action: "allow" };
       }
       // Deny (default ask)
-      const customReason = await ctx.ui.input("Reason for denying (optional):", "");
+      const customReason = await ctx.ui.input(
+        "Reason for denying (optional):",
+        "",
+      );
       const baseReason = `Denied by user (default ask)`;
-      const reason = customReason?.trim() ? `${baseReason} — ${customReason.trim()}` : baseReason;
+      const reason = customReason?.trim()
+        ? `${baseReason} — ${customReason.trim()}`
+        : baseReason;
       const key = decisionKey(tool, "__default__", target);
       sessionDecisions.set(key, { key, action: "deny", timestamp: Date.now() });
-      pi.appendEntry("permission-decision", { key, action: "deny", timestamp: Date.now() });
+      pi.appendEntry("permission-decision", {
+        key,
+        action: "deny",
+        timestamp: Date.now(),
+      });
       return { action: "deny", blocked: true, reason };
     }
 
@@ -549,7 +740,10 @@ export default function permissionsExtension(pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     sessionDecisions = new Map();
     for (const entry of ctx.sessionManager.getBranch()) {
-      if (entry.type === "custom" && entry.customType === "permission-decision") {
+      if (
+        entry.type === "custom" &&
+        entry.customType === "permission-decision"
+      ) {
         const data = entry.data as SessionDecision;
         if (data) {
           sessionDecisions.set(data.key, data);
@@ -569,7 +763,15 @@ export default function permissionsExtension(pi: ExtensionAPI) {
     if (typeof input.path === "string") return input.path;
 
     // Fallback: check common parameter names that represent a target
-    for (const key of ["path", "file", "directory", "dir", "url", "target", "command"] as const) {
+    for (const key of [
+      "path",
+      "file",
+      "directory",
+      "dir",
+      "url",
+      "target",
+      "command",
+    ] as const) {
       if (typeof input[key] === "string") return input[key];
     }
 
@@ -586,7 +788,10 @@ export default function permissionsExtension(pi: ExtensionAPI) {
 
     const result = await checkPermission(tool, target, ctx);
     if (result.blocked) {
-      return { block: true, reason: result.reason ?? "Blocked by permission system" };
+      return {
+        block: true,
+        reason: result.reason ?? "Blocked by permission system",
+      };
     }
     return undefined;
   });
@@ -601,7 +806,10 @@ export default function permissionsExtension(pi: ExtensionAPI) {
         { value: "add", label: "add <tool> <pattern> <action> - Add a rule" },
         { value: "remove", label: "remove <tool> <pattern> - Remove a rule" },
         { value: "reset", label: "reset - Clear session decisions" },
-        { value: "defaults", label: "defaults - Show default actions per tool" },
+        {
+          value: "defaults",
+          label: "defaults - Show default actions per tool",
+        },
         { value: "init", label: "init - Create default permissions.json" },
       ];
       const filtered = subcommands.filter((s) => s.value.startsWith(prefix));
@@ -615,15 +823,27 @@ export default function permissionsExtension(pi: ExtensionAPI) {
         // Show all rules
         const rules = getEffectiveRules();
         if (rules.length === 0) {
-          ctx.ui.notify("No permission rules configured. Use /permissions init to create defaults.", "info");
+          ctx.ui.notify(
+            "No permission rules configured. Use /permissions init to create defaults.",
+            "info",
+          );
           return;
         }
 
-        const lines: string[] = ["📋 Permission Rules (project + global, first match wins):\n"];
+        const lines: string[] = [
+          "📋 Permission Rules (project + global, first match wins):\n",
+        ];
         for (const [i, rule] of rules.entries()) {
-          const actionIcon = rule.action === "allow" ? "✅" : rule.action === "ask" ? "❓" : "⛔";
+          const actionIcon =
+            rule.action === "allow"
+              ? "✅"
+              : rule.action === "ask"
+                ? "❓"
+                : "⛔";
           const desc = rule.description ? ` — ${rule.description}` : "";
-          lines.push(`  ${i + 1}. ${actionIcon} [${rule.tool}] ${rule.pattern}${desc}`);
+          lines.push(
+            `  ${i + 1}. ${actionIcon} [${rule.tool}] ${rule.pattern}${desc}`,
+          );
         }
 
         // Show session decisions
@@ -637,11 +857,12 @@ export default function permissionsExtension(pi: ExtensionAPI) {
 
         // Show defaults for all active tools
         const allTools = pi.getAllTools();
-        const toolNames = [...new Set([...allTools.map(t => t.name), "*"])];
+        const toolNames = [...new Set([...allTools.map((t) => t.name), "*"])];
         lines.push("\n📌 Default actions:");
         for (const tool of toolNames) {
           const action = getDefaultAction(tool);
-          const icon = action === "allow" ? "✅" : action === "ask" ? "❓" : "⛔";
+          const icon =
+            action === "allow" ? "✅" : action === "ask" ? "❓" : "⛔";
           lines.push(`  ${icon} ${tool}: ${action}`);
         }
 
@@ -657,7 +878,10 @@ export default function permissionsExtension(pi: ExtensionAPI) {
         const description = parts.slice(4).join(" ") || undefined;
 
         if (!tool || !pattern || !action) {
-          ctx.ui.notify("Usage: /permissions add <tool> <pattern> <allow|ask|deny> [description]", "warning");
+          ctx.ui.notify(
+            "Usage: /permissions add <tool> <pattern> <allow|ask|deny> [description]",
+            "warning",
+          );
           return;
         }
 
@@ -681,7 +905,10 @@ export default function permissionsExtension(pi: ExtensionAPI) {
         config.rules.push({ tool, pattern, action, description });
         saveConfig(config, GLOBAL_CONFIG_DIR);
 
-        ctx.ui.notify(`✅ Added rule: [${tool}] ${pattern} → ${action}`, "info");
+        ctx.ui.notify(
+          `✅ Added rule: [${tool}] ${pattern} → ${action}`,
+          "info",
+        );
         return;
       }
 
@@ -691,7 +918,10 @@ export default function permissionsExtension(pi: ExtensionAPI) {
         const pattern = parts[2];
 
         if (!tool || !pattern) {
-          ctx.ui.notify("Usage: /permissions remove <tool> <pattern>", "warning");
+          ctx.ui.notify(
+            "Usage: /permissions remove <tool> <pattern>",
+            "warning",
+          );
           return;
         }
 
@@ -704,9 +934,15 @@ export default function permissionsExtension(pi: ExtensionAPI) {
 
         const removed = before - config.rules.length;
         if (removed > 0) {
-          ctx.ui.notify(`🗑️ Removed ${removed} rule(s): [${tool}] ${pattern}`, "info");
+          ctx.ui.notify(
+            `🗑️ Removed ${removed} rule(s): [${tool}] ${pattern}`,
+            "info",
+          );
         } else {
-          ctx.ui.notify(`No matching rule found: [${tool}] ${pattern}`, "warning");
+          ctx.ui.notify(
+            `No matching rule found: [${tool}] ${pattern}`,
+            "warning",
+          );
         }
         return;
       }
@@ -719,11 +955,12 @@ export default function permissionsExtension(pi: ExtensionAPI) {
 
       if (subcommand === "defaults") {
         const allTools = pi.getAllTools();
-        const tools = [...new Set([...allTools.map(t => t.name), "*"])];
+        const tools = [...new Set([...allTools.map((t) => t.name), "*"])];
         const lines: string[] = ["📌 Default actions per tool:\n"];
         for (const tool of tools) {
           const action = getDefaultAction(tool);
-          const icon = action === "allow" ? "✅" : action === "ask" ? "❓" : "⛔";
+          const icon =
+            action === "allow" ? "✅" : action === "ask" ? "❓" : "⛔";
           lines.push(`  ${icon} ${tool}: ${action}`);
         }
         ctx.ui.notify(lines.join("\n"), "info");
@@ -755,7 +992,10 @@ export default function permissionsExtension(pi: ExtensionAPI) {
         };
 
         saveConfig(config, GLOBAL_CONFIG_DIR);
-        ctx.ui.notify(`✅ Created ${configPath} with ${DEFAULT_RULES.length} default rules`, "info");
+        ctx.ui.notify(
+          `✅ Created ${configPath} with ${DEFAULT_RULES.length} default rules`,
+          "info",
+        );
         return;
       }
 
@@ -782,14 +1022,22 @@ export default function permissionsExtension(pi: ExtensionAPI) {
       "Use check_permission before running risky bash commands (rm, sudo, etc.) or writing to sensitive paths (.env, .git/) if you are uncertain whether the user would approve.",
     ],
     parameters: Type.Object({
-      tool: Type.String({ description: "Tool name: bash, write, edit, read, etc." }),
+      tool: Type.String({
+        description: "Tool name: bash, write, edit, read, etc.",
+      }),
       target: Type.String({
-        description: "The command string (for bash) or file path (for other tools) to check",
+        description:
+          "The command string (for bash) or file path (for other tools) to check",
       }),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const result = await checkPermission(params.tool, params.target, ctx);
-      const icon = result.action === "allow" ? "✅" : result.action === "ask" ? "❓" : "⛔";
+      const icon =
+        result.action === "allow"
+          ? "✅"
+          : result.action === "ask"
+            ? "❓"
+            : "⛔";
       const ruleInfo = result.rule
         ? ` (matched rule: ${result.rule.description ?? result.rule.pattern})`
         : "";
@@ -797,7 +1045,11 @@ export default function permissionsExtension(pi: ExtensionAPI) {
 
       return {
         content: [{ type: "text", text }],
-        details: { action: result.action, rule: result.rule, blocked: result.blocked },
+        details: {
+          action: result.action,
+          rule: result.rule,
+          blocked: result.blocked,
+        },
       };
     },
   });
@@ -817,7 +1069,7 @@ export default function permissionsExtension(pi: ExtensionAPI) {
       );
     } else {
       ctx.ui.notify(
-        '🔒 Permission system: no rules. Use /permissions init to create defaults.',
+        "🔒 Permission system: no rules. Use /permissions init to create defaults.",
         "info",
       );
     }

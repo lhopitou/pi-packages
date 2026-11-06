@@ -156,10 +156,8 @@ function createGondolinLsOps(vm: VM, localCwd: string): LsOperations {
         return false;
       }
     },
-    stat: async (filePath) =>
-      vm.fs.stat(toGuestPath(localCwd, filePath)),
-    readdir: async (dirPath) =>
-      vm.fs.listDir(toGuestPath(localCwd, dirPath)),
+    stat: async (filePath) => vm.fs.stat(toGuestPath(localCwd, filePath)),
+    readdir: async (dirPath) => vm.fs.listDir(toGuestPath(localCwd, dirPath)),
   };
 }
 
@@ -179,13 +177,22 @@ function createGondolinFindOps(vm: VM, localCwd: string): FindOperations {
       // Mirror pi's native fd args exactly.
       let effectivePattern = pattern;
       const args = [
-        "fd", "--glob", "--color=never", "--hidden",
-        "--no-require-git", "--absolute-path",
-        "--max-results", String(options.limit),
+        "fd",
+        "--glob",
+        "--color=never",
+        "--hidden",
+        "--no-require-git",
+        "--absolute-path",
+        "--max-results",
+        String(options.limit),
       ];
       if (pattern.includes("/")) {
         args.push("--full-path");
-        if (!pattern.startsWith("/") && !pattern.startsWith("**/") && pattern !== "**") {
+        if (
+          !pattern.startsWith("/") &&
+          !pattern.startsWith("**/") &&
+          pattern !== "**"
+        ) {
           effectivePattern = `**/${pattern}`;
         }
       }
@@ -218,17 +225,21 @@ async function executeGondolinGrep(
     const stat = await vm.fs.stat(guestSearchPath, { signal });
     isDirectory = stat.isDirectory();
   } catch {
-    return { content: [{ type: "text", text: "No matches found" }], details: undefined };
+    return {
+      content: [{ type: "text", text: "No matches found" }],
+      details: undefined,
+    };
   }
 
-  const contextValue = params.context && params.context > 0 ? params.context : 0;
+  const contextValue =
+    params.context && params.context > 0 ? params.context : 0;
   const effectiveLimit = Math.max(1, params.limit ?? DEFAULT_GREP_LIMIT);
 
   // Build rg args, mirroring pi's native grep.js.
   const args = ["rg", "--json", "--line-number", "--color=never", "--hidden"];
   if (params.ignoreCase) args.push("--ignore-case");
-  if (params.literal)     args.push("--fixed-strings");
-  if (params.glob)        args.push("--glob", params.glob);
+  if (params.literal) args.push("--fixed-strings");
+  if (params.glob) args.push("--glob", params.glob);
   args.push("--", params.pattern, guestSearchPath);
 
   // Run rg inside the VM.  Use abort controller for signal support.
@@ -239,7 +250,9 @@ async function executeGondolinGrep(
   let stdout = "";
   let aborted = false;
   try {
-    const proc = vm.exec(["/bin/sh", "-lc", args.join(" ")], { signal: controller.signal });
+    const proc = vm.exec(["/bin/sh", "-lc", args.join(" ")], {
+      signal: controller.signal,
+    });
     for await (const chunk of proc.output()) stdout += chunk.data;
     await proc;
   } catch {
@@ -262,8 +275,19 @@ async function executeGondolinGrep(
 
   for (const line of stdout.split("\n")) {
     if (!line.trim() || matchCount >= effectiveLimit) continue;
-    let event: { type?: string; data?: { path?: { text?: string }; line_number?: number; lines?: { text?: string } } };
-    try { event = JSON.parse(line); } catch { continue; }
+    let event: {
+      type?: string;
+      data?: {
+        path?: { text?: string };
+        line_number?: number;
+        lines?: { text?: string };
+      };
+    };
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
     if (event.type === "match") {
       matchCount++;
       const filePath = event.data?.path?.text;
@@ -280,7 +304,10 @@ async function executeGondolinGrep(
   }
 
   if (matchCount === 0) {
-    return { content: [{ type: "text", text: "No matches found" }], details: undefined };
+    return {
+      content: [{ type: "text", text: "No matches found" }],
+      details: undefined,
+    };
   }
 
   // Format output paths: relativize against search path (same logic as pi's grep.js).
@@ -326,15 +353,19 @@ async function executeGondolinGrep(
       const relativePath = formatPath(match.filePath);
       const lines = await getFileLines(match.filePath);
       if (!lines.length) {
-        outputLines.push(`${relativePath}:${match.lineNumber}: (unable to read file)`);
+        outputLines.push(
+          `${relativePath}:${match.lineNumber}: (unable to read file)`,
+        );
         continue;
       }
-      const start = contextValue > 0
-        ? Math.max(1, match.lineNumber - contextValue)
-        : match.lineNumber;
-      const end = contextValue > 0
-        ? Math.min(lines.length, match.lineNumber + contextValue)
-        : match.lineNumber;
+      const start =
+        contextValue > 0
+          ? Math.max(1, match.lineNumber - contextValue)
+          : match.lineNumber;
+      const end =
+        contextValue > 0
+          ? Math.min(lines.length, match.lineNumber + contextValue)
+          : match.lineNumber;
       for (let current = start; current <= end; current++) {
         const lineText = lines[current - 1] ?? "";
         const sanitized = lineText.replace(/\r/g, "");
@@ -351,14 +382,18 @@ async function executeGondolinGrep(
   }
 
   const rawOutput = outputLines.join("\n");
-  const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
+  const truncation = truncateHead(rawOutput, {
+    maxLines: Number.MAX_SAFE_INTEGER,
+  });
   let output = truncation.content;
 
   const details: GrepToolDetails = {};
   const notices: string[] = [];
   if (matchLimitReached) {
     details.matchLimitReached = effectiveLimit;
-    notices.push(`${effectiveLimit} matches limit reached. Use limit=${effectiveLimit * 2} for more, or refine pattern`);
+    notices.push(
+      `${effectiveLimit} matches limit reached. Use limit=${effectiveLimit * 2} for more, or refine pattern`,
+    );
   }
   if (truncation.truncated) {
     details.truncation = truncation;
@@ -451,7 +486,11 @@ function homeConfigDir(): string {
   return path.join(os.homedir(), ".pi", "agent");
 }
 
-function readConfig(filePath: string): { packages?: string[]; binaries?: Record<string, string>; setup?: string[] } {
+function readConfig(filePath: string): {
+  packages?: string[];
+  binaries?: Record<string, string>;
+  setup?: string[];
+} {
   try {
     const raw = fs.readFileSync(filePath, "utf8");
     return JSON.parse(raw);
@@ -549,34 +588,66 @@ export default function (pi: ExtensionAPI) {
           vm = resumed;
 
           // Quick probe for bash + configured tools.
-          const bashProbe = await resumed.exec(["/bin/sh", "-lc", "command -v bash || true"]);
+          const bashProbe = await resumed.exec([
+            "/bin/sh",
+            "-lc",
+            "command -v bash || true",
+          ]);
           shellPath = bashProbe.stdout.trim() || "/bin/sh";
 
           for (const pkg of packages) {
             const bin = guestBinary(pkg);
             try {
-              const probe = await resumed.exec(["/bin/sh", "-lc", `command -v ${bin} || true`]);
+              const probe = await resumed.exec([
+                "/bin/sh",
+                "-lc",
+                `command -v ${bin} || true`,
+              ]);
               if (probe.stdout.trim()) availableTools.set(pkg, bin);
-            } catch { /* probe failure skips this tool */ }
+            } catch {
+              /* probe failure skips this tool */
+            }
           }
 
           ctx?.ui.setStatus(
             "gondolin",
-            ctx.ui.theme.fg("accent", `Gondolin: ${resumed.id.slice(0, 8)} (${GUEST_WORKSPACE})`),
+            ctx.ui.theme.fg(
+              "accent",
+              `Gondolin: ${resumed.id.slice(0, 8)} (${GUEST_WORKSPACE})`,
+            ),
           );
           const bins = [...availableTools.values()];
           const toolNote = bins.length > 0 ? ` Tools: ${bins.join(", ")}.` : "";
-          ctx?.ui.notify(`Gondolin VM resumed from checkpoint. ${localCwd} is mounted at ${GUEST_WORKSPACE}.${toolNote}`, "info");
+          ctx?.ui.notify(
+            `Gondolin VM resumed from checkpoint. ${localCwd} is mounted at ${GUEST_WORKSPACE}.${toolNote}`,
+            "info",
+          );
           return resumed;
         }
         // Config changed — discard stale checkpoint.
-        try { fs.rmSync(checkpointPath); } catch { /* ok */ }
-        try { fs.rmSync(statePath); } catch { /* ok */ }
+        try {
+          fs.rmSync(checkpointPath);
+        } catch {
+          /* ok */
+        }
+        try {
+          fs.rmSync(statePath);
+        } catch {
+          /* ok */
+        }
       } catch {
         // Resume failed (assets missing, corrupt checkpoint, etc.).
         // Discard and fall through to cold boot.
-        try { fs.rmSync(checkpointPath); } catch { /* ok */ }
-        try { fs.rmSync(statePath); } catch { /* ok */ }
+        try {
+          fs.rmSync(checkpointPath);
+        } catch {
+          /* ok */
+        }
+        try {
+          fs.rmSync(statePath);
+        } catch {
+          /* ok */
+        }
       }
     }
 
@@ -729,7 +800,11 @@ export default function (pi: ExtensionAPI) {
       fs.writeFileSync(statePath, JSON.stringify({ packages, setup }));
     } catch {
       // Checkpoint failed — try graceful close as fallback.
-      try { await activeVm.close(); } catch { /* ok */ }
+      try {
+        await activeVm.close();
+      } catch {
+        /* ok */
+      }
     } finally {
       ctx.ui.setStatus("gondolin", undefined);
     }
@@ -745,8 +820,17 @@ export default function (pi: ExtensionAPI) {
         const checkpointPath = path.join(localCwd, ".pi", "gondolin.qcow2");
         const statePath = path.join(localCwd, ".pi", "gondolin-state.json");
         let removed = false;
-        try { fs.rmSync(checkpointPath); removed = true; } catch { /* didn't exist */ }
-        try { fs.rmSync(statePath); } catch { /* ok */ }
+        try {
+          fs.rmSync(checkpointPath);
+          removed = true;
+        } catch {
+          /* didn't exist */
+        }
+        try {
+          fs.rmSync(statePath);
+        } catch {
+          /* ok */
+        }
         ctx.ui.notify(
           removed
             ? "Gondolin checkpoint cleared. Next session will cold-boot."
@@ -822,11 +906,7 @@ export default function (pi: ExtensionAPI) {
       const activeVm = await ensureVm(ctx);
       if (!activeVm) return localBash.execute(id, params, signal, onUpdate);
       const tool = createBashTool(GUEST_WORKSPACE, {
-        operations: createGondolinBashOps(
-          activeVm,
-          localCwd,
-          shellPath,
-        ),
+        operations: createGondolinBashOps(activeVm, localCwd, shellPath),
       });
       return tool.execute(id, params, signal, onUpdate);
     },
@@ -862,13 +942,7 @@ export default function (pi: ExtensionAPI) {
       const activeVm = await ensureVm(ctx);
       if (!activeVm) return localGrep.execute(_id, params, signal, _onUpdate);
       const readOps = createGondolinReadOps(activeVm, localCwd);
-      return executeGondolinGrep(
-        activeVm,
-        localCwd,
-        params,
-        readOps,
-        signal,
-      );
+      return executeGondolinGrep(activeVm, localCwd, params, readOps, signal);
     },
   });
 
@@ -878,11 +952,7 @@ export default function (pi: ExtensionAPI) {
     const activeVm = await ensureVm(ctx);
     if (!activeVm) return undefined; // let pi use default host bash
     return {
-      operations: createGondolinBashOps(
-        activeVm,
-        localCwd,
-        shellPath,
-      ),
+      operations: createGondolinBashOps(activeVm, localCwd, shellPath),
     };
   });
 

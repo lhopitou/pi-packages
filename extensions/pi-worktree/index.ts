@@ -16,7 +16,11 @@
  * deleted by the merge/remove workflow.
  */
 
-import { SessionManager, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import {
+  SessionManager,
+  type ExtensionAPI,
+  type ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { execFile } from "node:child_process";
@@ -155,9 +159,7 @@ function registerReporter(pi: ExtensionAPI) {
         is_plugin?: boolean;
         tab_id?: number;
       }>;
-      const numeric = Number(
-        paneTarget!.replace(/^(terminal|plugin)_/, ""),
-      );
+      const numeric = Number(paneTarget!.replace(/^(terminal|plugin)_/, ""));
       const pane = panes.find(
         (p) => !p.is_plugin && p.id === numeric && p.tab_id != null,
       );
@@ -309,7 +311,11 @@ async function findStatusDir(): Promise<{
 }> {
   const root = await run("git", ["rev-parse", "--show-toplevel"]);
   if (!root) return { dir: null, root: null, expected: null };
-  const expected = join(dirname(root), `${basename(root)}__worktrees`, ".status");
+  const expected = join(
+    dirname(root),
+    `${basename(root)}__worktrees`,
+    ".status",
+  );
   return { dir: existsSync(expected) ? expected : null, root, expected };
 }
 
@@ -415,9 +421,7 @@ async function resolveSessionFile(
   try {
     const sessions = await SessionManager.list(worktreeCwd);
     if (sessions.length) {
-      sessions.sort(
-        (a, b) => b.modified.getTime() - a.modified.getTime(),
-      );
+      sessions.sort((a, b) => b.modified.getTime() - a.modified.getTime());
       return sessions[0].path;
     }
   } catch {
@@ -540,12 +544,14 @@ function registerCoordinator(pi: ExtensionAPI) {
       handle: Type.String({ description: "Worktree agent handle." }),
       count: Type.Optional(
         Type.Number({
-          description: "Number of recent assistant messages to return. Default: 1.",
+          description:
+            "Number of recent assistant messages to return. Default: 1.",
         }),
       ),
     }),
     renderCall(args, theme, context) {
-      const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+      const text =
+        (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
       let content =
         theme.fg("toolTitle", theme.bold("worktree_message ")) +
         theme.fg("toolTitle", args.handle ?? "...");
@@ -626,7 +632,11 @@ function registerCoordinator(pi: ExtensionAPI) {
                 `or has only emitted tool calls so far.`,
             },
           ],
-          details: { handle: agent.handle, sessionFile, effective: agent.effective },
+          details: {
+            handle: agent.handle,
+            sessionFile,
+            effective: agent.effective,
+          },
         };
       }
 
@@ -686,7 +696,8 @@ function registerCoordinator(pi: ExtensionAPI) {
         state.startedAt = Date.now();
         state.endedAt = undefined;
       }
-      const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+      const text =
+        (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
 
       const target = args.handles?.length
         ? args.handles.join(", ")
@@ -736,7 +747,8 @@ function registerCoordinator(pi: ExtensionAPI) {
           queueMicrotask(() => context.invalidate());
         }
       }
-      const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+      const text =
+        (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
       const output = result.content
         .filter((c) => c.type === "text")
         .map((c) => (c as { text: string }).text)

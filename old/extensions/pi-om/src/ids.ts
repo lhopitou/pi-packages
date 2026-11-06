@@ -10,7 +10,7 @@ import { debugLog } from "./debug-log.ts";
  * Accidental collisions of different content are logged via debugLog.
  */
 export function hashId(content: string): string {
-	return createHash("sha256").update(content).digest("hex").slice(0, 16);
+  return createHash("sha256").update(content).digest("hex").slice(0, 16);
 }
 
 /**
@@ -19,22 +19,20 @@ export function hashId(content: string): string {
  * new content, log a warning (accidental hash collision).
  * Returns true if the item was inserted (new or intentional dedup).
  */
-export function accumulateWithCollisionCheck<T extends { id: string; content: string }>(
-	map: Map<string, T>,
-	item: T,
-	label: string,
-): boolean {
-	const existing = map.get(item.id);
-	if (existing) {
-		if (existing.content !== item.content) {
-			debugLog(`${label}.hash_collision`, {
-				id: item.id,
-				existingContent: existing.content.slice(0, 200),
-				newContent: item.content.slice(0, 200),
-			});
-		}
-		return false; // Dedup: same ID, skip
-	}
-	map.set(item.id, item);
-	return true;
+export function accumulateWithCollisionCheck<
+  T extends { id: string; content: string },
+>(map: Map<string, T>, item: T, label: string): boolean {
+  const existing = map.get(item.id);
+  if (existing) {
+    if (existing.content !== item.content) {
+      debugLog(`${label}.hash_collision`, {
+        id: item.id,
+        existingContent: existing.content.slice(0, 200),
+        newContent: item.content.slice(0, 200),
+      });
+    }
+    return false; // Dedup: same ID, skip
+  }
+  map.set(item.id, item);
+  return true;
 }

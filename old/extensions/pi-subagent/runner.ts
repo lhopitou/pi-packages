@@ -5,7 +5,14 @@
  * and background (spawnBackgroundAgent) execution modes.
  */
 
-import { existsSync, readFileSync, rmSync, unlinkSync, writeFileSync, mkdirSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+  mkdirSync,
+} from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -185,7 +192,8 @@ async function buildSubagentArgs(
   const piBase = getPiCommand();
   const args: string[] = [
     ...piBase.args,
-    "--mode", "json",
+    "--mode",
+    "json",
     "--no-session",
     "--no-prompt-templates",
     "--no-context-files",
@@ -207,7 +215,10 @@ async function buildSubagentArgs(
   if (agent.model) {
     args.push("--model", agent.model);
   } else if (options.parentModel) {
-    args.push("--model", `${options.parentModel.provider}/${options.parentModel.id}`);
+    args.push(
+      "--model",
+      `${options.parentModel.provider}/${options.parentModel.id}`,
+    );
   }
 
   // Thinking level
@@ -240,9 +251,7 @@ async function buildSubagentArgs(
   let tmpPromptDir: string | undefined;
   let tmpPromptPath: string | undefined;
 
-  const effectivePrompt = retryHint
-    ? `${task}\n\n[Note: ${retryHint}]`
-    : task;
+  const effectivePrompt = retryHint ? `${task}\n\n[Note: ${retryHint}]` : task;
 
   if (agent.systemPrompt.trim()) {
     const tmp = await writePromptToTempFile(agent.name, agent.systemPrompt);
@@ -257,7 +266,10 @@ async function buildSubagentArgs(
   if (options.parentConversation && agent.inheritContext) {
     const tmpDir2 = await mkdtemp(join(tmpdir(), "pi-subagent-ctx-"));
     const ctxFile = join(tmpDir2, "parent-context.md");
-    writeFileSync(ctxFile, options.parentConversation, { encoding: "utf8", mode: 0o600 });
+    writeFileSync(ctxFile, options.parentConversation, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
     tmpContextDir = tmpDir2;
     tmpContextPath = ctxFile;
     args.push("--append-system-prompt", tmpContextPath);
@@ -271,7 +283,9 @@ async function buildSubagentArgs(
 
 // ── Foreground runner ────────────────────────────────────────────────
 
-export async function runSubagent(options: RunOptions): Promise<SubagentResult> {
+export async function runSubagent(
+  options: RunOptions,
+): Promise<SubagentResult> {
   const { cwd, config, signal, onEvent } = options;
   const startedAt = Date.now();
   const metadata = emptyMetadata();
@@ -316,7 +330,10 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
 
     // Emit typed event (skip streaming deltas)
     const typedEvent = e as unknown as SubagentEvent;
-    if (typedEvent.type !== "message_update" && typedEvent.type !== "message_start") {
+    if (
+      typedEvent.type !== "message_update" &&
+      typedEvent.type !== "message_start"
+    ) {
       onEvent?.(typedEvent);
     }
 
@@ -345,8 +362,10 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
         }
         const text = extractAssistantText(msg);
         if (text) lastAssistantText = text;
-        if (msg.model && typeof msg.model === "string") metadata.model = msg.model;
-        if (msg.stopReason && typeof msg.stopReason === "string") metadata.stopReason = msg.stopReason;
+        if (msg.model && typeof msg.model === "string")
+          metadata.model = msg.model;
+        if (msg.stopReason && typeof msg.stopReason === "string")
+          metadata.stopReason = msg.stopReason;
       }
     }
   };
@@ -408,7 +427,10 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
   });
 
   const raceResult = await Promise.race([
-    exitPromise.then((code): { type: "exit"; code: number } => ({ type: "exit", code })),
+    exitPromise.then((code): { type: "exit"; code: number } => ({
+      type: "exit",
+      code,
+    })),
     timeoutPromise.then((): { type: "timeout" } => ({ type: "timeout" })),
   ]);
 
@@ -420,32 +442,46 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
 
   // Clean temp files
   if (tmpPromptPath) {
-    try { unlinkSync(tmpPromptPath); } catch {}
+    try {
+      unlinkSync(tmpPromptPath);
+    } catch {}
   }
   if (tmpPromptDir) {
-    try { rmSync(tmpPromptDir, { recursive: true, force: true }); } catch {}
+    try {
+      rmSync(tmpPromptDir, { recursive: true, force: true });
+    } catch {}
   }
   if (tmpContextPath) {
-    try { unlinkSync(tmpContextPath); } catch {}
+    try {
+      unlinkSync(tmpContextPath);
+    } catch {}
   }
   if (tmpContextDir) {
-    try { rmSync(tmpContextDir, { recursive: true, force: true }); } catch {}
+    try {
+      rmSync(tmpContextDir, { recursive: true, force: true });
+    } catch {}
   }
 
   metadata.durationMs = Date.now() - startedAt;
 
   if (aborted) {
     return {
-      success: false, text: "", metadata,
-      aborted: true, timedOut: false,
+      success: false,
+      text: "",
+      metadata,
+      aborted: true,
+      timedOut: false,
       error: "Subagent was aborted by user",
     };
   }
 
   if (timedOut) {
     return {
-      success: false, text: "", metadata,
-      aborted: false, timedOut: true,
+      success: false,
+      text: "",
+      metadata,
+      aborted: false,
+      timedOut: true,
       error: `Subagent timed out after ${Math.round(config.timeoutMs / 60000)} minutes`,
     };
   }
@@ -454,8 +490,11 @@ export async function runSubagent(options: RunOptions): Promise<SubagentResult> 
 
   if (exitCode !== 0) {
     return {
-      success: false, text: "", metadata,
-      aborted: false, timedOut: false,
+      success: false,
+      text: "",
+      metadata,
+      aborted: false,
+      timedOut: false,
       error: `Subagent process exited with code ${exitCode}${stderrText ? `: ${stderrText.trim().slice(0, 500)}` : ""}`,
     };
   }
@@ -478,11 +517,15 @@ export async function spawnBackgroundAgent(
   const asyncDir = getAsyncRunDir(runId);
 
   // Create the async run directory
-  try { mkdirSync(asyncDir, { recursive: true }); } catch {}
+  try {
+    mkdirSync(asyncDir, { recursive: true });
+  } catch {}
 
   // Session file path for the child process
   const sessionDir = join(asyncDir, "sessions");
-  try { mkdirSync(sessionDir, { recursive: true }); } catch {}
+  try {
+    mkdirSync(sessionDir, { recursive: true });
+  } catch {}
   const sessionFile = join(sessionDir, "session.jsonl");
 
   // Build arguments using shared builder, plus the status reporter extension
@@ -502,7 +545,7 @@ export async function spawnBackgroundAgent(
   const proc = spawn(piBase.command, args, {
     cwd: options.cwd,
     shell: false,
-    stdio: "ignore",  // Detached: parent doesn't read stdout/stderr
+    stdio: "ignore", // Detached: parent doesn't read stdout/stderr
     detached: true,
     env: {
       ...process.env,
@@ -520,28 +563,30 @@ export async function spawnBackgroundAgent(
   const pid = proc.pid ?? 0;
 
   // Register the job in the async tracker
-  registerJob(
-    runId,
-    options.agent.name,
-    options.task,
-    pid,
-    sessionFile,
-  );
+  registerJob(runId, options.agent.name, options.task, pid, sessionFile);
 
   // Clean up temp files (the child has already read them at process start)
   // Delay cleanup slightly to ensure the child had time to fork
   setTimeout(() => {
     if (tmpPromptPath) {
-      try { unlinkSync(tmpPromptPath); } catch {}
+      try {
+        unlinkSync(tmpPromptPath);
+      } catch {}
     }
     if (tmpPromptDir) {
-      try { rmSync(tmpPromptDir, { recursive: true, force: true }); } catch {}
+      try {
+        rmSync(tmpPromptDir, { recursive: true, force: true });
+      } catch {}
     }
     if (tmpContextPath) {
-      try { unlinkSync(tmpContextPath); } catch {}
+      try {
+        unlinkSync(tmpContextPath);
+      } catch {}
     }
     if (tmpContextDir) {
-      try { rmSync(tmpContextDir, { recursive: true, force: true }); } catch {}
+      try {
+        rmSync(tmpContextDir, { recursive: true, force: true });
+      } catch {}
     }
   }, 2000);
 
@@ -571,8 +616,7 @@ export function formatMetadataCompact(m: SubagentMetadata): string {
 
 export function formatMetadataDetailed(m: SubagentMetadata): string {
   const parts: string[] = [];
-  if (m.turns > 0)
-    parts.push(`${m.turns} ${m.turns === 1 ? "turn" : "turns"}`);
+  if (m.turns > 0) parts.push(`${m.turns} ${m.turns === 1 ? "turn" : "turns"}`);
   if (m.toolCalls > 0) parts.push(`${m.toolCalls} tool calls`);
   if (m.failedToolCalls > 0) parts.push(`${m.failedToolCalls} failed`);
   if (m.input > 0) parts.push(`↑${formatTokens(m.input)}`);

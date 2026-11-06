@@ -32,9 +32,7 @@ export function loadPermissions(config: SubagentConfig): PermissionConfig {
 }
 
 /** Check if any permission rule uses 'ask' or 'deny' for write-capable tools. */
-export function hasRestrictiveRules(
-  permConfig: PermissionConfig,
-): boolean {
+export function hasRestrictiveRules(permConfig: PermissionConfig): boolean {
   if (!permConfig.rules) return false;
   return permConfig.rules.some(
     (r) =>

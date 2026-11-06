@@ -6,7 +6,12 @@
  * PageUp/PageDown, Home/End. Escape or 'q' to close.
  */
 
-import { matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import {
+  matchesKey,
+  truncateToWidth,
+  visibleWidth,
+  wrapTextWithAnsi,
+} from "@earendil-works/pi-tui";
 import type { ConversationEntry, MonitorStatus } from "./monitor.ts";
 import { statusIcon, statusLabel } from "./monitor.ts";
 import { formatMetadataDetailed } from "./runner.ts";
@@ -43,7 +48,10 @@ export function registerViewerAgent(initialState: ViewerAgentState): string {
 }
 
 /** Update a registered monitor's state. */
-export function updateViewerAgent(id: string, patch: Partial<ViewerAgentState>): void {
+export function updateViewerAgent(
+  id: string,
+  patch: Partial<ViewerAgentState>,
+): void {
   const existing = monitorRegistry.get(id);
   if (!existing) return;
   monitorRegistry.set(id, { ...existing, ...patch });
@@ -64,7 +72,10 @@ export function removeViewerAgent(id: string): void {
 }
 
 /** List all registered agents (for the /subagents menu). */
-export function listViewerAgents(): Array<{ id: string; state: ViewerAgentState }> {
+export function listViewerAgents(): Array<{
+  id: string;
+  state: ViewerAgentState;
+}> {
   return [...monitorRegistry.entries()].map(([id, state]) => ({ id, state }));
 }
 
@@ -75,7 +86,7 @@ export function cleanupViewerRegistry(maxAgeMs: number = 600_000): void {
     // Only clean up finished agents
     if (state.status === "running") continue;
     // Remove if older than maxAge
-    const age = (state.completedAt ?? state.startedAt);
+    const age = state.completedAt ?? state.startedAt;
     if (now - age > maxAgeMs) {
       monitorRegistry.delete(id);
     }
@@ -96,7 +107,10 @@ function formatDuration(startedAt: number, completedAt?: number): string {
 
 // ── Component ─────────────────────────────────────────────────────────
 
-type Theme = { fg(color: string, text: string): string; bold(text: string): string };
+type Theme = {
+  fg(color: string, text: string): string;
+  bold(text: string): string;
+};
 
 export class SubagentViewer {
   private scrollOffset = 0;
@@ -137,7 +151,10 @@ export class SubagentViewer {
       this.scrollOffset = Math.max(0, this.scrollOffset - viewportHeight);
       this.autoScroll = false;
     } else if (matchesKey(data, "pageDown")) {
-      this.scrollOffset = Math.min(maxScroll, this.scrollOffset + viewportHeight);
+      this.scrollOffset = Math.min(
+        maxScroll,
+        this.scrollOffset + viewportHeight,
+      );
       this.autoScroll = this.scrollOffset >= maxScroll;
     } else if (matchesKey(data, "home")) {
       this.scrollOffset = 0;
@@ -163,7 +180,11 @@ export class SubagentViewer {
     if (!state) {
       return [
         th.fg("border", `╭${"─".repeat(width - 2)}╮`),
-        th.fg("border", `│`) + " " + th.fg("dim", "Agent session expired".padEnd(innerW)) + " " + th.fg("border", `│`),
+        th.fg("border", `│`) +
+          " " +
+          th.fg("dim", "Agent session expired".padEnd(innerW)) +
+          " " +
+          th.fg("border", `│`),
         th.fg("border", `╰${"─".repeat(width - 2)}╯`),
       ];
     }
@@ -173,7 +194,11 @@ export class SubagentViewer {
       return s + " ".repeat(Math.max(0, len - vis));
     };
     const row = (content: string) =>
-      th.fg("border", "│") + " " + truncateToWidth(pad(content, innerW), innerW) + " " + th.fg("border", "│");
+      th.fg("border", "│") +
+      " " +
+      truncateToWidth(pad(content, innerW), innerW) +
+      " " +
+      th.fg("border", "│");
     const hrTop = th.fg("border", `╭${"─".repeat(width - 2)}╮`);
     const hrBot = th.fg("border", `╰${"─".repeat(width - 2)}╯`);
     const hrMid = row(th.fg("dim", "─".repeat(innerW)));
@@ -185,11 +210,14 @@ export class SubagentViewer {
     const icon = statusIcon(state.status, th);
     const label = statusLabel(state.status, th);
     const duration = formatDuration(state.startedAt, state.completedAt);
-    const scopeTag = state.agentScope !== "global" ? ` (${state.agentScope})` : "";
+    const scopeTag =
+      state.agentScope !== "global" ? ` (${state.agentScope})` : "";
     const metaStr = formatMetadataDetailed(state.metadata);
-    lines.push(row(
-      `${icon} ${label} ${th.bold(state.agentName)}${scopeTag}  ${th.fg("muted", state.task.slice(0, 60))} ${th.fg("dim", "·")} ${th.fg("dim", metaStr || duration)}`,
-    ));
+    lines.push(
+      row(
+        `${icon} ${label} ${th.bold(state.agentName)}${scopeTag}  ${th.fg("muted", state.task.slice(0, 60))} ${th.fg("dim", "·")} ${th.fg("dim", metaStr || duration)}`,
+      ),
+    );
     lines.push(hrMid);
 
     // Content — rebuild every render (live data)
@@ -202,7 +230,10 @@ export class SubagentViewer {
     }
 
     const visibleStart = Math.min(this.scrollOffset, maxScroll);
-    const visible = contentLines.slice(visibleStart, visibleStart + viewportHeight);
+    const visible = contentLines.slice(
+      visibleStart,
+      visibleStart + viewportHeight,
+    );
 
     for (let i = 0; i < viewportHeight; i++) {
       lines.push(row(visible[i] ?? ""));
@@ -210,12 +241,22 @@ export class SubagentViewer {
 
     // Footer
     lines.push(hrMid);
-    const scrollPct = contentLines.length <= viewportHeight
-      ? "100%"
-      : `${Math.round(((visibleStart + viewportHeight) / contentLines.length) * 100)}%`;
-    const footerLeft = th.fg("dim", `${contentLines.length} lines · ${scrollPct}`);
-    const footerRight = th.fg("dim", "↑↓ scroll · PgUp/PgDn · Home/End · Esc close");
-    const footerGap = Math.max(1, innerW - visibleWidth(footerLeft) - visibleWidth(footerRight));
+    const scrollPct =
+      contentLines.length <= viewportHeight
+        ? "100%"
+        : `${Math.round(((visibleStart + viewportHeight) / contentLines.length) * 100)}%`;
+    const footerLeft = th.fg(
+      "dim",
+      `${contentLines.length} lines · ${scrollPct}`,
+    );
+    const footerRight = th.fg(
+      "dim",
+      "↑↓ scroll · PgUp/PgDn · Home/End · Esc close",
+    );
+    const footerGap = Math.max(
+      1,
+      innerW - visibleWidth(footerLeft) - visibleWidth(footerRight),
+    );
     lines.push(row(footerLeft + " ".repeat(footerGap) + footerRight));
     lines.push(hrBot);
 
@@ -235,7 +276,10 @@ export class SubagentViewer {
     const currentLength = state.conversation?.length ?? 0;
     const currentStatus = state.status;
 
-    if (currentLength !== this.lastConversationLength || currentStatus !== this.lastStatus) {
+    if (
+      currentLength !== this.lastConversationLength ||
+      currentStatus !== this.lastStatus
+    ) {
       this.lastConversationLength = currentLength;
       this.lastStatus = currentStatus;
       this.tui.requestRender?.();
@@ -273,17 +317,19 @@ export class SubagentViewer {
 
       if (entry.role === "user") {
         lines.push(th.fg("accent", "[User]"));
-        const text = entry.text.length > 200
-          ? entry.text.slice(0, 197) + "..."
-          : entry.text;
+        const text =
+          entry.text.length > 200
+            ? entry.text.slice(0, 197) + "..."
+            : entry.text;
         for (const line of wrapTextWithAnsi(text, width)) {
           lines.push(th.fg("muted", line));
         }
       } else if (entry.role === "assistant") {
         lines.push(th.bold("[Assistant]"));
-        const text = entry.text.length > 1000
-          ? entry.text.slice(0, 997) + "..."
-          : entry.text;
+        const text =
+          entry.text.length > 1000
+            ? entry.text.slice(0, 997) + "..."
+            : entry.text;
         for (const line of wrapTextWithAnsi(text.trim(), width)) {
           lines.push(line);
         }

@@ -26,19 +26,23 @@ export default function (pi: ExtensionAPI): void {
     if (typeof filePath !== "string") return;
 
     try {
-      const absolutePath = isAbsolute(filePath) ? filePath : join(ctx.cwd, filePath);
+      const absolutePath = isAbsolute(filePath)
+        ? filePath
+        : join(ctx.cwd, filePath);
       const content = await readFile(absolutePath, "utf-8");
 
       // Normalize and compute hashline output
-		const normalized = normalizeToLF(content);
-		const visibleLines = getVisibleLines(normalized);
+      const normalized = normalizeToLF(content);
+      const visibleLines = getVisibleLines(normalized);
 
       if (visibleLines.length === 0) return;
 
       // Truncate to a reasonable limit to avoid excessive token usage
       const MAX_LINES = 2000;
       const truncated = visibleLines.length > MAX_LINES;
-      const displayLines = truncated ? visibleLines.slice(0, MAX_LINES) : visibleLines;
+      const displayLines = truncated
+        ? visibleLines.slice(0, MAX_LINES)
+        : visibleLines;
 
       const hashes = computeLineHashes(normalized);
       const selectedHashes = hashes.slice(0, displayLines.length);
@@ -53,7 +57,10 @@ export default function (pi: ExtensionAPI): void {
         return {
           content: [
             ...(event.content ?? []),
-            { type: "text", text: `\n\n--- Auto-read (hashline anchors) ---\n${hashlineOutput}${paginationHint}` },
+            {
+              type: "text",
+              text: `\n\n--- Auto-read (hashline anchors) ---\n${hashlineOutput}${paginationHint}`,
+            },
           ],
         };
       }

@@ -60,12 +60,19 @@ function loadAgentsFromDir(
       frontmatter = parsed.frontmatter;
       body = parsed.body;
     } catch (err) {
-      console.warn(`[pi-subagent] Skipping ${filePath}: frontmatter parse error: ${err}`);
+      console.warn(
+        `[pi-subagent] Skipping ${filePath}: frontmatter parse error: ${err}`,
+      );
       continue;
     }
 
-    if (!frontmatter.description || typeof frontmatter.description !== "string") {
-      console.warn(`[pi-subagent] Skipping ${filePath}: missing or invalid "description" in frontmatter`);
+    if (
+      !frontmatter.description ||
+      typeof frontmatter.description !== "string"
+    ) {
+      console.warn(
+        `[pi-subagent] Skipping ${filePath}: missing or invalid "description" in frontmatter`,
+      );
       continue;
     }
 
@@ -107,7 +114,9 @@ function loadAgentsFromDir(
       model:
         typeof frontmatter.model === "string" ? frontmatter.model : undefined,
       thinking:
-        typeof frontmatter.thinking === "string" ? frontmatter.thinking : undefined,
+        typeof frontmatter.thinking === "string"
+          ? frontmatter.thinking
+          : undefined,
       delegateWhen:
         typeof frontmatter.delegate_when === "string"
           ? frontmatter.delegate_when
@@ -172,7 +181,9 @@ export function hasWriteTools(agent: AgentDefinition): boolean {
 }
 
 /** Build the one-line description for the subagent tool listing. */
-export function buildAgentSummary(agents: Map<string, AgentDefinition>): string {
+export function buildAgentSummary(
+  agents: Map<string, AgentDefinition>,
+): string {
   if (agents.size === 0) return "No agents defined.";
   const entries = [...agents.entries()]
     .map(([name, def]) => `${name} (${def.description})`)
@@ -181,7 +192,9 @@ export function buildAgentSummary(agents: Map<string, AgentDefinition>): string 
 }
 
 /** Build the full list_subagents output. */
-export function buildAgentCatalog(agents: Map<string, AgentDefinition>): string {
+export function buildAgentCatalog(
+  agents: Map<string, AgentDefinition>,
+): string {
   if (agents.size === 0) return "No agents defined.";
 
   const sections: string[] = [];

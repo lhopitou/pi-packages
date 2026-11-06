@@ -48,25 +48,57 @@ export default function rgFdExtension(pi: ExtensionAPI) {
       "Use context to see surrounding lines for each match.",
     ],
     parameters: Type.Object({
-      pattern: Type.String({ description: "Search pattern (regex or literal string)" }),
-      path: Type.Optional(Type.String({ description: "Directory or file to search (default: current directory)" })),
-      glob: Type.Optional(Type.String({ description: "Filter files by glob pattern, e.g. '*.ts' or '**/*.spec.ts'" })),
-      ignoreCase: Type.Optional(Type.Boolean({ description: "Case-insensitive search (default: false)" })),
-      literal: Type.Optional(Type.Boolean({ description: "Treat pattern as literal string instead of regex (default: false)" })),
-      context: Type.Optional(Type.Number({ description: "Number of lines to show before and after each match (default: 0)" })),
-      limit: Type.Optional(Type.Number({ description: "Maximum number of matches to return (default: 100)" })),
+      pattern: Type.String({
+        description: "Search pattern (regex or literal string)",
+      }),
+      path: Type.Optional(
+        Type.String({
+          description:
+            "Directory or file to search (default: current directory)",
+        }),
+      ),
+      glob: Type.Optional(
+        Type.String({
+          description:
+            "Filter files by glob pattern, e.g. '*.ts' or '**/*.spec.ts'",
+        }),
+      ),
+      ignoreCase: Type.Optional(
+        Type.Boolean({
+          description: "Case-insensitive search (default: false)",
+        }),
+      ),
+      literal: Type.Optional(
+        Type.Boolean({
+          description:
+            "Treat pattern as literal string instead of regex (default: false)",
+        }),
+      ),
+      context: Type.Optional(
+        Type.Number({
+          description:
+            "Number of lines to show before and after each match (default: 0)",
+        }),
+      ),
+      limit: Type.Optional(
+        Type.Number({
+          description: "Maximum number of matches to return (default: 100)",
+        }),
+      ),
     }),
     renderCall(args, theme, _context) {
       const pattern = args.pattern ?? "...";
       const path = args.path || ".";
       let text =
-        theme.fg("toolTitle", theme.bold("rg")) + " " +
+        theme.fg("toolTitle", theme.bold("rg")) +
+        " " +
         theme.fg("accent", `/${pattern}/`) +
         theme.fg("toolOutput", ` in ${path}`);
       if (args.glob) text += theme.fg("toolOutput", ` (${args.glob})`);
       if (args.ignoreCase) text += theme.fg("toolOutput", " -i");
       if (args.literal) text += theme.fg("toolOutput", " --literal");
-      if (args.limit !== undefined) text += theme.fg("toolOutput", ` limit ${args.limit}`);
+      if (args.limit !== undefined)
+        text += theme.fg("toolOutput", ` limit ${args.limit}`);
       return new Text(text, 0, 0);
     },
 
@@ -80,9 +112,14 @@ export default function rgFdExtension(pi: ExtensionAPI) {
       const displayLines = lines.slice(0, maxLines);
       const remaining = lines.length - maxLines;
 
-      let out = displayLines.map((line) => theme.fg("toolOutput", line)).join("\n");
+      let out = displayLines
+        .map((line) => theme.fg("toolOutput", line))
+        .join("\n");
       if (remaining > 0) {
-        out += theme.fg("muted", `\n... (${remaining} more lines, `) + keyHint("app.tools.expand", "expand") + theme.fg("muted", ")");
+        out +=
+          theme.fg("muted", `\n... (${remaining} more lines, `) +
+          keyHint("app.tools.expand", "expand") +
+          theme.fg("muted", ")");
       }
       return new Text(out, 0, 0);
     },
@@ -93,7 +130,8 @@ export default function rgFdExtension(pi: ExtensionAPI) {
         "--line-number",
         "--color=never",
         "--hidden",
-        "--max-count", String(limit),
+        "--max-count",
+        String(limit),
       ];
 
       if (params.ignoreCase) args.push("--ignore-case");
@@ -116,13 +154,20 @@ export default function rgFdExtension(pi: ExtensionAPI) {
 
       if (code !== 0 && code !== 1) {
         return {
-          content: [{ type: "text", text: `Error: ${stderr || `rg exited with code ${code}`}` }],
+          content: [
+            {
+              type: "text",
+              text: `Error: ${stderr || `rg exited with code ${code}`}`,
+            },
+          ],
           details: { error: true },
         };
       }
 
       const output = truncateOutput(stdout);
-      const matchCount = output.split("\n").filter((l) => !l.startsWith("--") && l.includes(":")).length;
+      const matchCount = output
+        .split("\n")
+        .filter((l) => !l.startsWith("--") && l.includes(":")).length;
       const limited = matchCount >= limit;
 
       let text = output;
@@ -152,19 +197,30 @@ export default function rgFdExtension(pi: ExtensionAPI) {
     ],
     parameters: Type.Object({
       pattern: Type.String({
-        description: "Glob pattern to match files, e.g. '*.ts', '**/*.json', or 'src/**/*.spec.ts'",
+        description:
+          "Glob pattern to match files, e.g. '*.ts', '**/*.json', or 'src/**/*.spec.ts'",
       }),
-      path: Type.Optional(Type.String({ description: "Directory to search in (default: current directory)" })),
-      limit: Type.Optional(Type.Number({ description: "Maximum number of results (default: 1000)" })),
+      path: Type.Optional(
+        Type.String({
+          description: "Directory to search in (default: current directory)",
+        }),
+      ),
+      limit: Type.Optional(
+        Type.Number({
+          description: "Maximum number of results (default: 1000)",
+        }),
+      ),
     }),
     renderCall(args, theme, _context) {
       const pattern = args.pattern ?? "...";
       const path = args.path || ".";
       let text =
-        theme.fg("toolTitle", theme.bold("fd")) + " " +
+        theme.fg("toolTitle", theme.bold("fd")) +
+        " " +
         theme.fg("accent", pattern) +
         theme.fg("toolOutput", ` in ${path}`);
-      if (args.limit !== undefined) text += theme.fg("toolOutput", ` limit ${args.limit}`);
+      if (args.limit !== undefined)
+        text += theme.fg("toolOutput", ` limit ${args.limit}`);
       return new Text(text, 0, 0);
     },
 
@@ -178,9 +234,14 @@ export default function rgFdExtension(pi: ExtensionAPI) {
       const displayLines = lines.slice(0, maxLines);
       const remaining = lines.length - maxLines;
 
-      let out = displayLines.map((line) => theme.fg("toolOutput", line)).join("\n");
+      let out = displayLines
+        .map((line) => theme.fg("toolOutput", line))
+        .join("\n");
       if (remaining > 0) {
-        out += theme.fg("muted", `\n... (${remaining} more lines, `) + keyHint("app.tools.expand", "expand") + theme.fg("muted", ")");
+        out +=
+          theme.fg("muted", `\n... (${remaining} more lines, `) +
+          keyHint("app.tools.expand", "expand") +
+          theme.fg("muted", ")");
       }
       return new Text(out, 0, 0);
     },
@@ -192,7 +253,8 @@ export default function rgFdExtension(pi: ExtensionAPI) {
         "--color=never",
         "--hidden",
         "--no-require-git",
-        "--max-results", String(limit),
+        "--max-results",
+        String(limit),
       ];
 
       // If pattern contains /, use --full-path and prepend **/ if needed
@@ -200,7 +262,11 @@ export default function rgFdExtension(pi: ExtensionAPI) {
       let effectivePattern = params.pattern;
       if (params.pattern.includes("/")) {
         args.push("--full-path");
-        if (!params.pattern.startsWith("/") && !params.pattern.startsWith("**/") && params.pattern !== "**") {
+        if (
+          !params.pattern.startsWith("/") &&
+          !params.pattern.startsWith("**/") &&
+          params.pattern !== "**"
+        ) {
           effectivePattern = `**/${params.pattern}`;
         }
       }
@@ -211,7 +277,12 @@ export default function rgFdExtension(pi: ExtensionAPI) {
 
       if (code !== 0 && !stdout) {
         return {
-          content: [{ type: "text", text: `Error: ${stderr || `fd exited with code ${code}`}` }],
+          content: [
+            {
+              type: "text",
+              text: `Error: ${stderr || `fd exited with code ${code}`}`,
+            },
+          ],
           details: { error: true },
         };
       }

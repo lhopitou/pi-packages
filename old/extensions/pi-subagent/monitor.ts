@@ -12,29 +12,41 @@ import type { AgentDefinition } from "./agents.ts";
 // ── Shared status helpers ───────────────────────────────────────────
 
 export type MonitorStatus =
-  | "running"
-  | "completed"
-  | "aborted"
-  | "error"
-  | "timed_out";
+  "running" | "completed" | "aborted" | "error" | "timed_out";
 
-export function statusIcon(status: MonitorStatus, theme: { fg: (name: string, text: string) => string }): string {
+export function statusIcon(
+  status: MonitorStatus,
+  theme: { fg: (name: string, text: string) => string },
+): string {
   switch (status) {
-    case "running": return theme.fg("muted", "⏳");
-    case "completed": return theme.fg("success", "✓");
-    case "aborted": return theme.fg("warning", "■");
-    case "timed_out": return theme.fg("warning", "⏱");
-    case "error": return theme.fg("error", "✗");
+    case "running":
+      return theme.fg("muted", "⏳");
+    case "completed":
+      return theme.fg("success", "✓");
+    case "aborted":
+      return theme.fg("warning", "■");
+    case "timed_out":
+      return theme.fg("warning", "⏱");
+    case "error":
+      return theme.fg("error", "✗");
   }
 }
 
-export function statusLabel(status: MonitorStatus, theme: { fg: (name: string, text: string) => string }): string {
+export function statusLabel(
+  status: MonitorStatus,
+  theme: { fg: (name: string, text: string) => string },
+): string {
   switch (status) {
-    case "running": return theme.fg("muted", "Running");
-    case "completed": return theme.fg("success", "Completed");
-    case "aborted": return theme.fg("warning", "Aborted");
-    case "timed_out": return theme.fg("warning", "Timed out");
-    case "error": return theme.fg("error", "Failed");
+    case "running":
+      return theme.fg("muted", "Running");
+    case "completed":
+      return theme.fg("success", "Completed");
+    case "aborted":
+      return theme.fg("warning", "Aborted");
+    case "timed_out":
+      return theme.fg("warning", "Timed out");
+    case "error":
+      return theme.fg("error", "Failed");
   }
 }
 
@@ -73,7 +85,9 @@ export class SubagentMonitor {
   pushEvent(event: SubagentEvent): void {
     // ── Full assistant message at message_end ──────────────────
     if (event.type === "message_end" && event.message?.role === "assistant") {
-      const fullText = extractAssistantText(event.message as Record<string, unknown>);
+      const fullText = extractAssistantText(
+        event.message as Record<string, unknown>,
+      );
 
       if (fullText) {
         const lastAssistant = this.entries.findLastIndex(
@@ -98,13 +112,16 @@ export class SubagentMonitor {
       let argsPreview = "";
       if (event.args) {
         const args = event.args;
-        if (args.path || args.filePath) argsPreview = String(args.path ?? args.filePath);
+        if (args.path || args.filePath)
+          argsPreview = String(args.path ?? args.filePath);
         else if (args.command) argsPreview = String(args.command).slice(0, 80);
         else if (args.query) argsPreview = String(args.query).slice(0, 60);
         else if (args.url) argsPreview = String(args.url).slice(0, 60);
         else if (args.pattern) argsPreview = String(args.pattern);
         else {
-          const firstValue = Object.values(args).find((v) => typeof v === "string" && v.length > 0);
+          const firstValue = Object.values(args).find(
+            (v) => typeof v === "string" && v.length > 0,
+          );
           if (firstValue) argsPreview = String(firstValue).slice(0, 60);
         }
       }
@@ -138,17 +155,41 @@ export class SubagentMonitor {
     }
   }
 
-  markCompleted(): void { this.status = "completed"; }
-  markAborted(): void { this.status = "aborted"; }
-  markError(): void { this.status = "error"; }
-  markTimedOut(): void { this.status = "timed_out"; }
+  markCompleted(): void {
+    this.status = "completed";
+  }
+  markAborted(): void {
+    this.status = "aborted";
+  }
+  markError(): void {
+    this.status = "error";
+  }
+  markTimedOut(): void {
+    this.status = "timed_out";
+  }
 
-  getConversation(): ConversationEntry[] { return [...this.entries]; }
-  getToolCallCount(): number { return this.toolCallCount; }
-  getPermissionDeniedCount(): number { return this.permissionDeniedCount; }
-  getStatus(): MonitorStatus { return this.status; }
-  getAgentName(): string { return this.agentName; }
-  getAgentScope(): "global" | "project" { return this.agentScope; }
-  isRunning(): boolean { return this.status === "running"; }
-  isFinal(): boolean { return this.status !== "running"; }
+  getConversation(): ConversationEntry[] {
+    return [...this.entries];
+  }
+  getToolCallCount(): number {
+    return this.toolCallCount;
+  }
+  getPermissionDeniedCount(): number {
+    return this.permissionDeniedCount;
+  }
+  getStatus(): MonitorStatus {
+    return this.status;
+  }
+  getAgentName(): string {
+    return this.agentName;
+  }
+  getAgentScope(): "global" | "project" {
+    return this.agentScope;
+  }
+  isRunning(): boolean {
+    return this.status === "running";
+  }
+  isFinal(): boolean {
+    return this.status !== "running";
+  }
 }

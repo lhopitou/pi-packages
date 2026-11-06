@@ -5,7 +5,10 @@
  * See: https://workmux.raine.dev/guide/status-tracking
  */
 
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 
 type AssistantState = { stopReason?: string; errorMessage?: string };
 

@@ -8,24 +8,31 @@ const CONTEXT_USAGE_INSTRUCTIONS = `These are condensed memories from earlier in
 Treat these as past records. When entries conflict, the most recent observation reflects the latest known state. Work that prior observations describe as completed should not be redone unless the user explicitly asks to revisit it.`;
 
 export function observationToSummaryLine(observation: Observation): string {
-	return `[${observation.id}] ${observation.timestamp} [${observation.relevance}] ${observation.content}`;
+  return `[${observation.id}] ${observation.timestamp} [${observation.relevance}] ${observation.content}`;
 }
 
 export function reflectionToSummaryLine(reflection: Reflection): string {
-	return `[${reflection.id}] ${reflection.content}`;
+  return `[${reflection.id}] ${reflection.content}`;
 }
 
-export function renderSummary(reflections: Reflection[], observations: Observation[]): string {
-	if (reflections.length === 0 && observations.length === 0) return "";
+export function renderSummary(
+  reflections: Reflection[],
+  observations: Observation[],
+): string {
+  if (reflections.length === 0 && observations.length === 0) return "";
 
-	const parts: string[] = [CONTEXT_USAGE_INSTRUCTIONS];
-	if (reflections.length > 0) {
-		parts.push(`## Reflections\n${reflections.map(reflectionToSummaryLine).join("\n")}`);
-	}
-	if (observations.length > 0) {
-		parts.push(`## Observations\n${observations.map(observationToSummaryLine).join("\n")}`);
-	}
-	return parts.join("\n\n");
+  const parts: string[] = [CONTEXT_USAGE_INSTRUCTIONS];
+  if (reflections.length > 0) {
+    parts.push(
+      `## Reflections\n${reflections.map(reflectionToSummaryLine).join("\n")}`,
+    );
+  }
+  if (observations.length > 0) {
+    parts.push(
+      `## Observations\n${observations.map(observationToSummaryLine).join("\n")}`,
+    );
+  }
+  return parts.join("\n\n");
 }
 
 const HANDOVER_CONTEXT_INSTRUCTIONS = `This is a handover document from a previous session phase. Use it to continue work effectively.
@@ -35,15 +42,22 @@ const HANDOVER_CONTEXT_INSTRUCTIONS = `This is a handover document from a previo
 
 Treat durable facts as ground truth. Observations provide orientation but may be superseded by new events.`;
 
-export function renderHandoverSummary(reflections: Reflection[], observations: Observation[]): string {
-	if (reflections.length === 0 && observations.length === 0) return "";
+export function renderHandoverSummary(
+  reflections: Reflection[],
+  observations: Observation[],
+): string {
+  if (reflections.length === 0 && observations.length === 0) return "";
 
-	const parts: string[] = [HANDOVER_CONTEXT_INSTRUCTIONS];
-	if (reflections.length > 0) {
-		parts.push(`## Durable Facts (from reflections — preserve as-is)\n${reflections.map((r) => `- ${r.content}`).join("\n")}`);
-	}
-	if (observations.length > 0) {
-		parts.push(`## Observations (live session events)\n${observations.map((o) => `- ${o.timestamp} — ${o.content}`).join("\n")}`);
-	}
-	return parts.join("\n\n");
+  const parts: string[] = [HANDOVER_CONTEXT_INSTRUCTIONS];
+  if (reflections.length > 0) {
+    parts.push(
+      `## Durable Facts (from reflections — preserve as-is)\n${reflections.map((r) => `- ${r.content}`).join("\n")}`,
+    );
+  }
+  if (observations.length > 0) {
+    parts.push(
+      `## Observations (live session events)\n${observations.map((o) => `- ${o.timestamp} — ${o.content}`).join("\n")}`,
+    );
+  }
+  return parts.join("\n\n");
 }

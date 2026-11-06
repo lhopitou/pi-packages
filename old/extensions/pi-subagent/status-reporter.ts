@@ -176,7 +176,8 @@ export default function statusReporterExtension(pi: ExtensionAPI) {
 
     if (msg.role === "assistant") {
       turnCount++;
-      const usage = msg.usage as Record<string, number | { total?: number }> | undefined;
+      const usage = msg.usage as
+        Record<string, number | { total?: number }> | undefined;
       if (usage) {
         input += (usage.input as number) ?? 0;
         output += (usage.output as number) ?? 0;
@@ -187,7 +188,8 @@ export default function statusReporterExtension(pi: ExtensionAPI) {
       }
 
       if (msg.model && typeof msg.model === "string") model = msg.model;
-      if (msg.stopReason && typeof msg.stopReason === "string") stopReason = msg.stopReason;
+      if (msg.stopReason && typeof msg.stopReason === "string")
+        stopReason = msg.stopReason;
 
       // Extract assistant text
       const content = msg.content;

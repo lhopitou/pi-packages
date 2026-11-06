@@ -43,12 +43,18 @@ function extractTitleFromHtml(html: string): string {
   return match ? match[1].trim() : "";
 }
 
-async function extractWithJinaReader(url: string, signal?: AbortSignal): Promise<ExtractedContent | null> {
+async function extractWithJinaReader(
+  url: string,
+  signal?: AbortSignal,
+): Promise<ExtractedContent | null> {
   const jinaUrl = JINA_READER_BASE + url;
   try {
     const res = await fetch(jinaUrl, {
       headers: { Accept: "text/markdown", "X-No-Cache": "true" },
-      signal: AbortSignal.any([AbortSignal.timeout(JINA_TIMEOUT_MS), ...(signal ? [signal] : [])]),
+      signal: AbortSignal.any([
+        AbortSignal.timeout(JINA_TIMEOUT_MS),
+        ...(signal ? [signal] : []),
+      ]),
     });
     if (!res.ok) return null;
 
@@ -65,7 +71,10 @@ async function extractWithJinaReader(url: string, signal?: AbortSignal): Promise
       return null;
     }
 
-    const title = extractHeadingTitle(markdownPart) || new URL(url).pathname.split("/").pop() || url;
+    const title =
+      extractHeadingTitle(markdownPart) ||
+      new URL(url).pathname.split("/").pop() ||
+      url;
     return { url, title, content: markdownPart, error: null };
   } catch (err) {
     if (isAbortError(err)) throw err;
@@ -73,12 +82,18 @@ async function extractWithJinaReader(url: string, signal?: AbortSignal): Promise
   }
 }
 
-function extractWithFallback(html: string, url: string): ExtractedContent | null {
+function extractWithFallback(
+  html: string,
+  url: string,
+): ExtractedContent | null {
   // Try turndown first — it handles HTML → markdown reasonably for simple pages
   try {
     const markdown = turndown.turndown(html);
     if (markdown && markdown.trim().length >= 200) {
-      const title = extractTitleFromHtml(html) || new URL(url).pathname.split("/").pop() || url;
+      const title =
+        extractTitleFromHtml(html) ||
+        new URL(url).pathname.split("/").pop() ||
+        url;
       return { url, title, content: markdown, error: null };
     }
   } catch {
@@ -89,32 +104,51 @@ function extractWithFallback(html: string, url: string): ExtractedContent | null
   const text = stripHtmlTags(html);
   if (text.length < 100) return null;
 
-  const title = extractTitleFromHtml(html) || new URL(url).pathname.split("/").pop() || url;
+  const title =
+    extractTitleFromHtml(html) || new URL(url).pathname.split("/").pop() || url;
   return { url, title, content: text, error: null };
 }
 
-async function fetchSingleUrl(url: string, signal?: AbortSignal, forceClone?: boolean): Promise<ExtractedContent> {
+async function fetchSingleUrl(
+  url: string,
+  signal?: AbortSignal,
+  forceClone?: boolean,
+): Promise<ExtractedContent> {
   // GitHub
   if (isGitHubURL(url)) {
     try {
       return await extractGitHub(url, signal, forceClone);
     } catch (err) {
-      return { url, title: "", content: "", error: "GitHub extraction failed: " + errorMessage(err) };
+      return {
+        url,
+        title: "",
+        content: "",
+        error: "GitHub extraction failed: " + errorMessage(err),
+      };
     }
   }
 
   // HTTP fetch
   try {
     const res = await fetch(url, {
-      signal: AbortSignal.any([AbortSignal.timeout(DEFAULT_TIMEOUT_MS), ...(signal ? [signal] : [])]),
+      signal: AbortSignal.any([
+        AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+        ...(signal ? [signal] : []),
+      ]),
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; PiAgent/1.0)",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       },
     });
 
     if (!res.ok) {
-      return { url, title: "", content: "", error: "HTTP " + res.status + ": " + res.statusText };
+      return {
+        url,
+        title: "",
+        content: "",
+        error: "HTTP " + res.status + ": " + res.statusText,
+      };
     }
 
     const contentType = res.headers.get("content-type") || "";
@@ -125,7 +159,12 @@ async function fetchSingleUrl(url: string, signal?: AbortSignal, forceClone?: bo
         const buffer = await res.arrayBuffer();
         return await extractPDFToMarkdown(url, Buffer.from(buffer));
       } catch (err) {
-        return { url, title: "", content: "", error: "PDF extraction failed: " + errorMessage(err) };
+        return {
+          url,
+          title: "",
+          content: "",
+          error: "PDF extraction failed: " + errorMessage(err),
+        };
       }
     }
 
@@ -141,7 +180,10 @@ async function fetchSingleUrl(url: string, signal?: AbortSignal, forceClone?: bo
     }
 
     // HTML
-    if (contentType.includes("text/html") || contentType.includes("application/xhtml")) {
+    if (
+      contentType.includes("text/html") ||
+      contentType.includes("application/xhtml")
+    ) {
       const html = await res.text();
 
       // Primary: Jina Reader (handles JS rendering, SPAs, anti-bot)
@@ -152,14 +194,30 @@ async function fetchSingleUrl(url: string, signal?: AbortSignal, forceClone?: bo
       const fallbackResult = extractWithFallback(html, url);
       if (fallbackResult) return fallbackResult;
 
-      return { url, title: "", content: "", error: "Could not extract readable content from page" };
+      return {
+        url,
+        title: "",
+        content: "",
+        error: "Could not extract readable content from page",
+      };
     }
 
     // Unknown content type
-    return { url, title: "", content: "", error: "Unsupported content type: " + contentType };
+    return {
+      url,
+      title: "",
+      content: "",
+      error: "Unsupported content type: " + contentType,
+    };
   } catch (err) {
-    if (isAbortError(err)) return { url, title: "", content: "", error: "Aborted" };
-    return { url, title: "", content: "", error: "Fetch failed: " + errorMessage(err) };
+    if (isAbortError(err))
+      return { url, title: "", content: "", error: "Aborted" };
+    return {
+      url,
+      title: "",
+      content: "",
+      error: "Fetch failed: " + errorMessage(err),
+    };
   }
 }
 
@@ -183,5 +241,8 @@ export async function fetchAllContent(
 
 export function truncateForInline(content: string): string {
   if (content.length <= MAX_INLINE_CONTENT) return content;
-  return content.slice(0, MAX_INLINE_CONTENT).trimEnd() + "\n\n[Content truncated. Use get_search_content to retrieve full content.]";
+  return (
+    content.slice(0, MAX_INLINE_CONTENT).trimEnd() +
+    "\n\n[Content truncated. Use get_search_content to retrieve full content.]"
+  );
 }

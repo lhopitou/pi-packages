@@ -11,27 +11,27 @@ import { registerHandoverInjection } from "./src/handover/injection.ts";
 import { registerHandoverSuggest } from "./src/handover/suggest.ts";
 
 export default function piOm(pi: ExtensionAPI) {
-	const runtime = new Runtime();
+  const runtime = new Runtime();
 
-	// Within-phase foundation (from elpapi42 V3)
-	registerConsolidationTrigger(pi, runtime);
-	registerCompactionTrigger(pi, runtime);
-	registerCompactionHook(pi, runtime);
+  // Within-phase foundation (from elpapi42 V3)
+  registerConsolidationTrigger(pi, runtime);
+  registerCompactionTrigger(pi, runtime);
+  registerCompactionHook(pi, runtime);
 
-	registerStatusCommand(pi, runtime);
-	registerViewCommand(pi, runtime);
-	pi.registerCommand("om:config", {
-		description: "View and set pi-om settings",
-		handler: registerConfigCommand(runtime),
-	});
+  registerStatusCommand(pi, runtime);
+  registerViewCommand(pi, runtime);
+  pi.registerCommand("om:config", {
+    description: "View and set pi-om settings",
+    handler: registerConfigCommand(runtime),
+  });
 
-	// Phase boundary layer (new for pi-om)
-	registerHandoverCommand(pi, runtime);
-	registerHandoverInjection(pi);
-	registerHandoverSuggest(pi, runtime);
+  // Phase boundary layer (new for pi-om)
+  registerHandoverCommand(pi, runtime);
+  registerHandoverInjection(pi);
+  registerHandoverSuggest(pi, runtime);
 
-	// Reset handover suggestion flag on new session
-	pi.on("session_start", async () => {
-		runtime.handoverSuggested = false;
-	});
+  // Reset handover suggestion flag on new session
+  pi.on("session_start", async () => {
+    runtime.handoverSuggested = false;
+  });
 }

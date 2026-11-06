@@ -57,7 +57,9 @@ export function loadConfig(): SubagentConfig {
     const defaults = getDefaultConfig();
 
     const maxRetries =
-      typeof parsed.maxRetries === "number" ? parsed.maxRetries : defaults.maxRetries;
+      typeof parsed.maxRetries === "number"
+        ? parsed.maxRetries
+        : defaults.maxRetries;
     const concurrencyLimit =
       typeof parsed.concurrencyLimit === "number"
         ? parsed.concurrencyLimit
@@ -94,5 +96,9 @@ export async function saveConfig(config: SubagentConfig): Promise<void> {
     permissionExtensionPath: tildePath(config.permissionExtensionPath),
     concurrencyLimit: config.concurrencyLimit,
   };
-  await writeFile(configPath, `${JSON.stringify(serializable, null, 2)}\n`, "utf8");
+  await writeFile(
+    configPath,
+    `${JSON.stringify(serializable, null, 2)}\n`,
+    "utf8",
+  );
 }

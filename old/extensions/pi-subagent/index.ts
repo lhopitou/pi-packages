@@ -4,17 +4,27 @@
  * Discovers agent definitions, registers tools, and wires up the subagent system.
  */
 
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { discoverAgents, type AgentDiscoveryResult } from "./agents.ts";
 import { registerTools } from "./tool.ts";
 import { loadConfig } from "./config.ts";
 import { listViewerAgents, SubagentViewer, setActiveViewer } from "./viewer.ts";
 import {
-	getAggregatedStats,
-	formatAggregatedStats,
-	clearStats,
+  getAggregatedStats,
+  formatAggregatedStats,
+  clearStats,
 } from "./stats.ts";
-import { activeJobCount, listJobs as listBgJobs, recoverJobs, setUiContext, setOnChange, getJob } from "./async-tracker.ts";
+import {
+  activeJobCount,
+  listJobs as listBgJobs,
+  recoverJobs,
+  setUiContext,
+  setOnChange,
+  getJob,
+} from "./async-tracker.ts";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { renderBackgroundWidget } from "./widget.ts";
@@ -48,12 +58,23 @@ export default function subagentExtension(pi: ExtensionAPI) {
     try {
       const raw = readFileSync(resultPath, "utf8");
       const result = JSON.parse(raw) as {
-        text: string; turns: number; toolCalls: number;
-        input: number; output: number; totalTokens: number;
-        cost: number; durationMs: number;
-        success: boolean; error?: string;
+        text: string;
+        turns: number;
+        toolCalls: number;
+        input: number;
+        output: number;
+        totalTokens: number;
+        cost: number;
+        durationMs: number;
+        success: boolean;
+        error?: string;
       };
-      const fmt = (n: number) => n < 1000 ? String(n) : n < 10000 ? `${(n / 1000).toFixed(1)}k` : `${Math.round(n / 1000)}k`;
+      const fmt = (n: number) =>
+        n < 1000
+          ? String(n)
+          : n < 10000
+            ? `${(n / 1000).toFixed(1)}k`
+            : `${Math.round(n / 1000)}k`;
       metadataStr = `${result.turns} turns, ${result.toolCalls} tools, ↑${fmt(result.input)} ↓${fmt(result.output)}, $${result.cost.toFixed(4)}`;
       const firstLine = result.text.split("\n")[0].slice(0, 120);
       preview = firstLine;
@@ -66,7 +87,9 @@ export default function subagentExtension(pi: ExtensionAPI) {
       preview ? `Preview: ${preview}` : "",
       `Use subagent({action:'collect', job_id:'${jobId}'}) for full output.`,
       `Session: ${job.sessionFile}`,
-    ].filter(Boolean).join("\n");
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     pi.sendUserMessage(card, { deliverAs: "followUp" });
   }
@@ -131,8 +154,15 @@ export default function subagentExtension(pi: ExtensionAPI) {
   pi.on("session_before_compact", (event) => {
     const active = activeJobCount();
     if (active > 0) {
-      const jobs = listBgJobs().filter((j) => j.status === "running" || j.status === "queued");
-      const jobList = jobs.map((j) => `  - ${j.agent} (${j.id.slice(0, 8)}): ${j.status}, ${j.turnCount} turns`).join("\n");
+      const jobs = listBgJobs().filter(
+        (j) => j.status === "running" || j.status === "queued",
+      );
+      const jobList = jobs
+        .map(
+          (j) =>
+            `  - ${j.agent} (${j.id.slice(0, 8)}): ${j.status}, ${j.turnCount} turns`,
+        )
+        .join("\n");
       const reminder = `\n\n**Reminder: ${active} background subagent${active > 1 ? "s are" : " is"} still running:**\n${jobList}\nUse subagent({action:'status'}) to check progress. Use subagent({action:'collect',job_id:'...'}) when complete.`;
       event.customInstructions = (event.customInstructions ?? "") + reminder;
     }
@@ -192,7 +222,8 @@ export default function subagentExtension(pi: ExtensionAPI) {
 
   // /subagent-stats — View per-agent aggregated usage statistics
   pi.registerCommand("subagent-stats", {
-    description: "View per-agent usage statistics (tokens, cost, duration). Use 'clear' to reset.",
+    description:
+      "View per-agent usage statistics (tokens, cost, duration). Use 'clear' to reset.",
     handler: async (args, ctx) => {
       if (args.trim() === "clear") {
         clearStats();
@@ -217,12 +248,25 @@ export default function subagentExtension(pi: ExtensionAPI) {
     if (agents.length === 0) return;
 
     const totalRuns = Object.values(stats).reduce((sum, s) => sum + s.runs, 0);
-    const totalCost = Object.values(stats).reduce((sum, s) => sum + s.totalCost, 0);
-    const totalInput = Object.values(stats).reduce((sum, s) => sum + s.totalInput, 0);
-    const totalOutput = Object.values(stats).reduce((sum, s) => sum + s.totalOutput, 0);
+    const totalCost = Object.values(stats).reduce(
+      (sum, s) => sum + s.totalCost,
+      0,
+    );
+    const totalInput = Object.values(stats).reduce(
+      (sum, s) => sum + s.totalInput,
+      0,
+    );
+    const totalOutput = Object.values(stats).reduce(
+      (sum, s) => sum + s.totalOutput,
+      0,
+    );
 
     const fmt = (n: number) =>
-      n < 1000 ? String(n) : n < 10000 ? `${(n / 1000).toFixed(1)}k` : `${Math.round(n / 1000)}k`;
+      n < 1000
+        ? String(n)
+        : n < 10000
+          ? `${(n / 1000).toFixed(1)}k`
+          : `${Math.round(n / 1000)}k`;
 
     ctx.ui.setStatus(
       "subagent",
@@ -236,7 +280,10 @@ export default function subagentExtension(pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       const agents = listViewerAgents();
       if (agents.length === 0) {
-        ctx.ui.notify("No subagent sessions to view. Run a subagent first.", "info");
+        ctx.ui.notify(
+          "No subagent sessions to view. Run a subagent first.",
+          "info",
+        );
         return;
       }
 
@@ -248,7 +295,12 @@ export default function subagentExtension(pi: ExtensionAPI) {
 
       // Multiple — let user pick by index (not indexOf, which breaks on duplicates)
       const options = agents.map(({ state }, idx) => {
-        const icon = state.status === "running" ? "●" : state.status === "completed" ? "✓" : "✗";
+        const icon =
+          state.status === "running"
+            ? "●"
+            : state.status === "completed"
+              ? "✓"
+              : "✗";
         const duration = state.completedAt
           ? `${((state.completedAt - state.startedAt) / 1000).toFixed(1)}s`
           : "running";
@@ -269,7 +321,12 @@ export default function subagentExtension(pi: ExtensionAPI) {
   async function openViewer(ctx: any, agentId: string) {
     setActiveViewer(undefined);
     await ctx.ui.custom<undefined>(
-      (tui: any, theme: any, _keybindings: any, done: (result: undefined) => void) => {
+      (
+        tui: any,
+        theme: any,
+        _keybindings: any,
+        done: (result: undefined) => void,
+      ) => {
         const v = new SubagentViewer(tui, agentId, theme, done);
         setActiveViewer(v);
         return v;

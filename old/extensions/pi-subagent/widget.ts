@@ -6,7 +6,11 @@
  */
 
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
-import { listJobs, activeJobCount, type AsyncJobState } from "./async-tracker.ts";
+import {
+  listJobs,
+  activeJobCount,
+  type AsyncJobState,
+} from "./async-tracker.ts";
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -25,11 +29,16 @@ function formatTokens(n: number): string {
 
 function statusIcon(status: AsyncJobState["status"]): string {
   switch (status) {
-    case "queued": return "○";
-    case "running": return "◉";
-    case "complete": return "✓";
-    case "failed": return "✗";
-    case "cancelled": return "⊘";
+    case "queued":
+      return "○";
+    case "running":
+      return "◉";
+    case "complete":
+      return "✓";
+    case "failed":
+      return "✗";
+    case "cancelled":
+      return "⊘";
   }
 }
 
@@ -51,9 +60,10 @@ function renderJobLine(job: AsyncJobState): string {
   if (job.status === "running" && job.currentTool) {
     line += ` · ${job.currentTool}`;
     if (job.currentPath) {
-      const shortPath = job.currentPath.length > 40
-        ? "…" + job.currentPath.slice(-39)
-        : job.currentPath;
+      const shortPath =
+        job.currentPath.length > 40
+          ? "…" + job.currentPath.slice(-39)
+          : job.currentPath;
       line += ` ${shortPath}`;
     }
   }

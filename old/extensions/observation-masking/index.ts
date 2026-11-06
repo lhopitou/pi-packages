@@ -44,10 +44,8 @@ function estTokens(chars: number): number {
   return Math.ceil(chars / 4);
 }
 
-const MASK_PLACEHOLDER = (
-  toolName: string,
-  tokenCount: number,
-): string => `[Tool output masked: ${toolName} — ~${tokenCount.toLocaleString()} tokens]`;
+const MASK_PLACEHOLDER = (toolName: string, tokenCount: number): string =>
+  `[Tool output masked: ${toolName} — ~${tokenCount.toLocaleString()} tokens]`;
 
 // ── Config persistence ──────────────────────────────────────────
 
@@ -102,7 +100,9 @@ function isErrorResult(msg: AgentMessage): boolean {
 }
 
 function getToolName(msg: AgentMessage): string {
-  return msg.toolName || (msg.toolCallId ? msg.toolCallId.slice(0, 12) : "unknown");
+  return (
+    msg.toolName || (msg.toolCallId ? msg.toolCallId.slice(0, 12) : "unknown")
+  );
 }
 
 /**
@@ -202,7 +202,11 @@ function applyMasking(
 export default async function (pi: ExtensionAPI) {
   // Load persistent config
   let config = await loadConfig();
-  let sessionStats: SessionStats = { maskedCount: 0, tokensBefore: 0, tokensAfter: 0 };
+  let sessionStats: SessionStats = {
+    maskedCount: 0,
+    tokensBefore: 0,
+    tokensAfter: 0,
+  };
   let lastMaskResult: MaskResult | null = null;
   /** Actual input token count reported by the provider in the last assistant message (preferred). */
   let lastProviderInputTokens: number | null = null;
@@ -234,7 +238,8 @@ export default async function (pi: ExtensionAPI) {
       );
     } else {
       const errNote = config.keepErrors ? "" : " (no-err)";
-      const turnLabel = config.keepTurns === 0 ? "all" : String(config.keepTurns);
+      const turnLabel =
+        config.keepTurns === 0 ? "all" : String(config.keepTurns);
       ctx.ui.setStatus("obs-mask", `ObsMask: keep ${turnLabel}${errNote}`);
     }
   }
@@ -246,7 +251,6 @@ export default async function (pi: ExtensionAPI) {
       const messages = (event.messages ?? []) as AgentMessage[];
 
       lastMaskResult = applyMasking(messages, config);
-
 
       if (lastMaskResult.maskedCount > 0) {
         sessionStats.maskedCount += lastMaskResult.maskedCount;
@@ -281,8 +285,9 @@ export default async function (pi: ExtensionAPI) {
         // input = new non-cached tokens, cacheRead = cached tokens
         // totalTokens = input + cacheRead + output (safe fallback)
         lastProviderInputTokens =
-          (u.input != null && u.cacheRead != null) ? u.input + u.cacheRead
-          : u.totalTokens ?? u.input ?? null;
+          u.input != null && u.cacheRead != null
+            ? u.input + u.cacheRead
+            : (u.totalTokens ?? u.input ?? null);
         break;
       }
     }
@@ -324,7 +329,10 @@ export default async function (pi: ExtensionAPI) {
         case "off":
           config.enabled = false;
           await saveConfig(config);
-          ctx.ui.notify("Observation masking OFF — full context exposed", "info");
+          ctx.ui.notify(
+            "Observation masking OFF — full context exposed",
+            "info",
+          );
           updateStatus(ctx);
           break;
 
@@ -332,12 +340,18 @@ export default async function (pi: ExtensionAPI) {
         case "keep": {
           const n = parseInt(parts[1], 10);
           if (isNaN(n) || n < 0) {
-            ctx.ui.notify("Usage: /mask keep <number>  (0 = mask all, 5 = default)", "error");
+            ctx.ui.notify(
+              "Usage: /mask keep <number>  (0 = mask all, 5 = default)",
+              "error",
+            );
             return;
           }
           config.keepTurns = n;
           await saveConfig(config);
-          const label = n === 0 ? "Masking all tool results" : `Keeping last ${n} turns intact`;
+          const label =
+            n === 0
+              ? "Masking all tool results"
+              : `Keeping last ${n} turns intact`;
           ctx.ui.notify(label, "info");
           updateStatus(ctx);
           break;
@@ -368,7 +382,8 @@ export default async function (pi: ExtensionAPI) {
         case "status":
         case "stats":
         case "": {
-          const savedTokens = sessionStats.tokensBefore - sessionStats.tokensAfter;
+          const savedTokens =
+            sessionStats.tokensBefore - sessionStats.tokensAfter;
 
           const lines = [
             `ObsMask: ${config.enabled ? "✅ enabled" : "❌ disabled"}`,
@@ -393,8 +408,11 @@ export default async function (pi: ExtensionAPI) {
             `  Est. saved:      ~${savedTokens.toLocaleString()} tokens`,
           );
           if (lastMaskResult?.maskedCount) {
-            const lastSaved = lastMaskResult.tokensBefore - lastMaskResult.tokensAfter;
-            lines.push(`  Last turn saved: ~${lastSaved.toLocaleString()} tokens (${lastMaskResult.maskedCount} outputs)`);
+            const lastSaved =
+              lastMaskResult.tokensBefore - lastMaskResult.tokensAfter;
+            lines.push(
+              `  Last turn saved: ~${lastSaved.toLocaleString()} tokens (${lastMaskResult.maskedCount} outputs)`,
+            );
           }
           ctx.ui.notify(lines.join("\n"), "info");
           break;

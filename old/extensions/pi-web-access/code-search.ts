@@ -13,22 +13,35 @@ function isMissingMcpToolError(message: string): boolean {
 }
 
 function buildFallbackQuery(query: string): string {
-  const hasCodeTerms = /\b(api|code|docs?|documentation|example|github|implementation|library|source|stackoverflow)\b/i.test(query);
-  return hasCodeTerms ? query : `${query} code examples documentation GitHub Stack Overflow official docs`;
+  const hasCodeTerms =
+    /\b(api|code|docs?|documentation|example|github|implementation|library|source|stackoverflow)\b/i.test(
+      query,
+    );
+  return hasCodeTerms
+    ? query
+    : `${query} code examples documentation GitHub Stack Overflow official docs`;
 }
 
 function maxTokensToResultCount(maxTokens: number): number {
   return Math.min(20, Math.max(5, Math.ceil(maxTokens / 1000)));
 }
 
-async function executeFallbackSearch(query: string, maxTokens: number, signal?: AbortSignal): Promise<string> {
-  const text = await callExaMcp(WEB_SEARCH_TOOL, {
-    query: buildFallbackQuery(query),
-    numResults: maxTokensToResultCount(maxTokens),
-    livecrawl: "fallback",
-    type: "auto",
-    contextMaxCharacters: Math.min(50000, Math.max(1000, maxTokens * 4)),
-  }, signal);
+async function executeFallbackSearch(
+  query: string,
+  maxTokens: number,
+  signal?: AbortSignal,
+): Promise<string> {
+  const text = await callExaMcp(
+    WEB_SEARCH_TOOL,
+    {
+      query: buildFallbackQuery(query),
+      numResults: maxTokensToResultCount(maxTokens),
+      livecrawl: "fallback",
+      type: "auto",
+      contextMaxCharacters: Math.min(50000, Math.max(1000, maxTokens * 4)),
+    },
+    signal,
+  );
   return truncateToTokenEstimate(text, maxTokens);
 }
 
@@ -42,7 +55,12 @@ export async function executeCodeSearch(
   error?: string;
 }> {
   const trimmed = query.trim();
-  if (!trimmed) return { content: "Error: No query provided.", mode: "web-search-fallback", error: "No query provided" };
+  if (!trimmed)
+    return {
+      content: "Error: No query provided.",
+      mode: "web-search-fallback",
+      error: "No query provided",
+    };
 
   try {
     let mode: "code-context" | "web-search-fallback" = "web-search-fallback";
@@ -52,7 +70,11 @@ export async function executeCodeSearch(
       text = await executeFallbackSearch(trimmed, maxTokens, signal);
     } else {
       try {
-        text = await callExaMcp(CODE_CONTEXT_TOOL, { query: trimmed, tokensNum: maxTokens }, signal);
+        text = await callExaMcp(
+          CODE_CONTEXT_TOOL,
+          { query: trimmed, tokensNum: maxTokens },
+          signal,
+        );
         mode = "code-context";
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -65,6 +87,10 @@ export async function executeCodeSearch(
     return { content: text, mode };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { content: `Error: ${message}`, mode: "web-search-fallback", error: message };
+    return {
+      content: `Error: ${message}`,
+      mode: "web-search-fallback",
+      error: message,
+    };
   }
 }

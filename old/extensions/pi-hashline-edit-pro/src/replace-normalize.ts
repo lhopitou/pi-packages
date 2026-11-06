@@ -1,39 +1,36 @@
-
 import { isRecord, hasOwn } from "./utils";
 
 function coerceEditsArray(edits: unknown): unknown {
-	if (typeof edits !== "string") {
-		return edits;
-	}
-	try {
-		const parsed: unknown = JSON.parse(edits);
-		return Array.isArray(parsed) ? parsed : edits;
-	} catch {
-		return edits;
-	}
+  if (typeof edits !== "string") {
+    return edits;
+  }
+  try {
+    const parsed: unknown = JSON.parse(edits);
+    return Array.isArray(parsed) ? parsed : edits;
+  } catch {
+    return edits;
+  }
 }
-
 
 export function normalizeReplaceRequest(input: unknown): unknown {
-	if (!isRecord(input)) {
-		return input;
-	}
+  if (!isRecord(input)) {
+    return input;
+  }
 
-	const record: Record<string, unknown> = { ...input };
+  const record: Record<string, unknown> = { ...input };
 
-	// file_path → path alias.
-	if (typeof record.path !== "string" && typeof record.file_path === "string") {
-		record.path = record.file_path;
-		delete record.file_path;
-	}
+  // file_path → path alias.
+  if (typeof record.path !== "string" && typeof record.file_path === "string") {
+    record.path = record.file_path;
+    delete record.file_path;
+  }
 
-	const hasEditsField = hasOwn(record, "edits");
+  const hasEditsField = hasOwn(record, "edits");
 
-	// edits-as-JSON-string → array.
-	if (hasEditsField) {
-		record.edits = coerceEditsArray(record.edits);
-	}
+  // edits-as-JSON-string → array.
+  if (hasEditsField) {
+    record.edits = coerceEditsArray(record.edits);
+  }
 
-	return record;
+  return record;
 }
-

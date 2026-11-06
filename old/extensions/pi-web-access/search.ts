@@ -1,6 +1,10 @@
 import { getExaApiKey } from "./config.js";
 import { isAbortError, errorMessage } from "./utils.js";
-import type { SearchResponse, SearchResult, ExtractedContent } from "./storage.js";
+import type {
+  SearchResponse,
+  SearchResult,
+  ExtractedContent,
+} from "./storage.js";
 
 const EXA_MCP_URL = "https://mcp.exa.ai/mcp";
 const EXA_ANSWER_URL = "https://api.exa.ai/answer";
@@ -54,11 +58,15 @@ export async function callExaMcp(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error("Exa MCP error " + response.status + ": " + errorText.slice(0, 300));
+    throw new Error(
+      "Exa MCP error " + response.status + ": " + errorText.slice(0, 300),
+    );
   }
 
   const body = await response.text();
-  const dataLines = body.split("\n").filter(function (line) { return line.startsWith("data:"); });
+  const dataLines = body.split("\n").filter(function (line) {
+    return line.startsWith("data:");
+  });
 
   let parsed: McpRpcResponse | null = null;
   for (const line of dataLines) {
@@ -66,27 +74,34 @@ export async function callExaMcp(
     if (!payload) continue;
     try {
       const candidate = JSON.parse(payload) as McpRpcResponse;
-      if ((candidate.result != null) || (candidate.error != null)) {
+      if (candidate.result != null || candidate.error != null) {
         parsed = candidate;
         break;
       }
-    } catch { /* try next line */ }
+    } catch {
+      /* try next line */
+    }
   }
 
   if (!parsed) {
     try {
       const candidate = JSON.parse(body) as McpRpcResponse;
-      if ((candidate.result != null) || (candidate.error != null)) {
+      if (candidate.result != null || candidate.error != null) {
         parsed = candidate;
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   if (!parsed) throw new Error("Exa MCP returned an empty response");
 
   if (parsed.error) {
-    const code = typeof parsed.error.code === "number" ? " " + parsed.error.code : "";
-    throw new Error("Exa MCP error" + code + ": " + (parsed.error.message || "Unknown error"));
+    const code =
+      typeof parsed.error.code === "number" ? " " + parsed.error.code : "";
+    throw new Error(
+      "Exa MCP error" + code + ": " + (parsed.error.message || "Unknown error"),
+    );
   }
 
   const result = parsed.result;
@@ -107,7 +122,11 @@ export async function callExaMcp(
   let text = "";
   if (result != null && result.content != null) {
     for (const item of result.content) {
-      if (item.type === "text" && typeof item.text === "string" && item.text.trim().length > 0) {
+      if (
+        item.type === "text" &&
+        typeof item.text === "string" &&
+        item.text.trim().length > 0
+      ) {
         text = item.text;
         break;
       }
@@ -127,25 +146,33 @@ interface McpParsedResult {
 }
 
 function parseMcpResults(text: string): McpParsedResult[] | null {
-  const blocks = text.split(/(?=^Title: )/m).filter(function (b) { return b.trim().length > 0; });
-  const parsed = blocks.map(function (block) {
-    const titleMatch = block.match(/^Title: (.+)/m);
-    const title = titleMatch != null && titleMatch[1] != null ? titleMatch[1].trim() : "";
-    const urlMatch = block.match(/^URL: (.+)/m);
-    const url = urlMatch != null && urlMatch[1] != null ? urlMatch[1].trim() : "";
-    let content = "";
-    const textStart = block.indexOf("\nText: ");
-    if (textStart >= 0) {
-      content = block.slice(textStart + 7).trim();
-    } else {
-      const hlMatch = block.match(/\nHighlights:\s*\n/);
-      if (hlMatch != null && hlMatch.index != null) {
-        content = block.slice(hlMatch.index + hlMatch[0].length).trim();
+  const blocks = text.split(/(?=^Title: )/m).filter(function (b) {
+    return b.trim().length > 0;
+  });
+  const parsed = blocks
+    .map(function (block) {
+      const titleMatch = block.match(/^Title: (.+)/m);
+      const title =
+        titleMatch != null && titleMatch[1] != null ? titleMatch[1].trim() : "";
+      const urlMatch = block.match(/^URL: (.+)/m);
+      const url =
+        urlMatch != null && urlMatch[1] != null ? urlMatch[1].trim() : "";
+      let content = "";
+      const textStart = block.indexOf("\nText: ");
+      if (textStart >= 0) {
+        content = block.slice(textStart + 7).trim();
+      } else {
+        const hlMatch = block.match(/\nHighlights:\s*\n/);
+        if (hlMatch != null && hlMatch.index != null) {
+          content = block.slice(hlMatch.index + hlMatch[0].length).trim();
+        }
       }
-    }
-    content = content.replace(/\n---\s*$/, "").trim();
-    return { title: title, url: url, content: content };
-  }).filter(function (r) { return r.url.length > 0; });
+      content = content.replace(/\n---\s*$/, "").trim();
+      return { title: title, url: url, content: content };
+    })
+    .filter(function (r) {
+      return r.url.length > 0;
+    });
   return parsed.length > 0 ? parsed : null;
 }
 
@@ -155,15 +182,26 @@ function buildAnswerFromMcp(results: McpParsedResult[]): string {
     const r = results[i];
     const snippet = r.content.replace(/\s+/g, " ").trim().slice(0, 500);
     if (!snippet) continue;
-    parts.push(snippet + "\nSource: " + (r.title || "Source " + (i + 1)) + " (" + r.url + ")");
+    parts.push(
+      snippet +
+        "\nSource: " +
+        (r.title || "Source " + (i + 1)) +
+        " (" +
+        r.url +
+        ")",
+    );
   }
   return parts.join("\n\n");
 }
 
 function mapMcpInlineContent(results: McpParsedResult[]): ExtractedContent[] {
-  return results.filter(function (r) { return r.content.length > 0; }).map(function (r) {
-    return { url: r.url, title: r.title, content: r.content, error: null };
-  });
+  return results
+    .filter(function (r) {
+      return r.content.length > 0;
+    })
+    .map(function (r) {
+      return { url: r.url, title: r.title, content: r.content, error: null };
+    });
 }
 
 function buildMcpQuery(query: string, options: SearchOptions): string {
@@ -176,24 +214,41 @@ function buildMcpQuery(query: string, options: SearchOptions): string {
   if (options.recencyFilter != null) {
     const now = new Date();
     switch (options.recencyFilter) {
-      case "day": parts.push("past 24 hours"); break;
-      case "week": parts.push("past week"); break;
-      case "month": parts.push(now.toLocaleString("en", { month: "long" }) + " " + now.getFullYear()); break;
-      case "year": parts.push(String(now.getFullYear())); break;
+      case "day":
+        parts.push("past 24 hours");
+        break;
+      case "week":
+        parts.push("past week");
+        break;
+      case "month":
+        parts.push(
+          now.toLocaleString("en", { month: "long" }) + " " + now.getFullYear(),
+        );
+        break;
+      case "year":
+        parts.push(String(now.getFullYear()));
+        break;
     }
   }
   return parts.join(" ");
 }
 
-async function searchWithExaMcp(query: string, options: SearchOptions = {}): Promise<SearchResponse | null> {
+async function searchWithExaMcp(
+  query: string,
+  options: SearchOptions = {},
+): Promise<SearchResponse | null> {
   const enrichedQuery = buildMcpQuery(query, options);
-  const text = await callExaMcp("web_search_exa", {
-    query: enrichedQuery,
-    numResults: options.numResults != null ? options.numResults : 5,
-    livecrawl: "fallback",
-    type: "auto",
-    contextMaxCharacters: options.includeContent ? 50000 : 3000,
-  }, options.signal);
+  const text = await callExaMcp(
+    "web_search_exa",
+    {
+      query: enrichedQuery,
+      numResults: options.numResults != null ? options.numResults : 5,
+      livecrawl: "fallback",
+      type: "auto",
+      contextMaxCharacters: options.includeContent ? 50000 : 3000,
+    },
+    options.signal,
+  );
 
   const parsedResults = parseMcpResults(text);
   if (!parsedResults) return null;
@@ -221,7 +276,12 @@ async function searchWithExaMcp(query: string, options: SearchOptions = {}): Pro
 
 interface ExaAnswerResponse {
   answer?: string;
-  citations?: Array<{ url?: string; title?: string; text?: string; publishedDate?: string }>;
+  citations?: Array<{
+    url?: string;
+    title?: string;
+    text?: string;
+    publishedDate?: string;
+  }>;
 }
 
 interface ExaSearchResponse {
@@ -237,15 +297,36 @@ interface ExaSearchResponse {
 
 function recencyToStartDate(filter: string): string {
   const now = new Date();
-  const offsets: Record<string, number> = { day: 1, week: 7, month: 30, year: 365 };
+  const offsets: Record<string, number> = {
+    day: 1,
+    week: 7,
+    month: 30,
+    year: 365,
+  };
   const days = offsets[filter] != null ? offsets[filter] : 0;
   return new Date(now.getTime() - days * 86400000).toISOString();
 }
 
-function mapDomainFilter(domainFilter: string[] | undefined): { includeDomains?: string[]; excludeDomains?: string[] } {
+function mapDomainFilter(domainFilter: string[] | undefined): {
+  includeDomains?: string[];
+  excludeDomains?: string[];
+} {
   if (domainFilter == null || domainFilter.length === 0) return {};
-  const includeDomains = domainFilter.filter(function (d) { return !d.startsWith("-") && d.trim().length > 0; }).map(function (d) { return d.trim(); });
-  const excludeDomains = domainFilter.filter(function (d) { return d.startsWith("-"); }).map(function (d) { return d.slice(1).trim(); }).filter(Boolean);
+  const includeDomains = domainFilter
+    .filter(function (d) {
+      return !d.startsWith("-") && d.trim().length > 0;
+    })
+    .map(function (d) {
+      return d.trim();
+    });
+  const excludeDomains = domainFilter
+    .filter(function (d) {
+      return d.startsWith("-");
+    })
+    .map(function (d) {
+      return d.slice(1).trim();
+    })
+    .filter(Boolean);
   const result: { includeDomains?: string[]; excludeDomains?: string[] } = {};
   if (includeDomains.length > 0) result.includeDomains = includeDomains;
   if (excludeDomains.length > 0) result.excludeDomains = excludeDomains;
@@ -254,53 +335,89 @@ function mapDomainFilter(domainFilter: string[] | undefined): { includeDomains?:
 
 function normalizeHighlights(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value.filter(function (item): item is string { return typeof item === "string" && item.trim().length > 0; });
+  return value.filter(function (item): item is string {
+    return typeof item === "string" && item.trim().length > 0;
+  });
 }
 
-function buildAnswerFromApiResults(results: ExaSearchResponse["results"]): string {
+function buildAnswerFromApiResults(
+  results: ExaSearchResponse["results"],
+): string {
   if (results == null || results.length === 0) return "";
   const parts: string[] = [];
   for (let i = 0; i < results.length; i++) {
     const item = results[i];
     if (item == null || item.url == null) continue;
     const highlights = normalizeHighlights(item.highlights);
-    const content = highlights.length > 0
-      ? highlights.join(" ")
-      : (typeof item.text === "string" ? item.text.trim().slice(0, 1000) : "");
+    const content =
+      highlights.length > 0
+        ? highlights.join(" ")
+        : typeof item.text === "string"
+          ? item.text.trim().slice(0, 1000)
+          : "";
     if (!content) continue;
-    parts.push(content + "\nSource: " + (item.title || "Source " + (i + 1)) + " (" + item.url + ")");
+    parts.push(
+      content +
+        "\nSource: " +
+        (item.title || "Source " + (i + 1)) +
+        " (" +
+        item.url +
+        ")",
+    );
   }
   return parts.join("\n\n");
 }
 
-function mapApiResults(results: Array<{ url?: string; title?: string }> | undefined): SearchResult[] {
+function mapApiResults(
+  results: Array<{ url?: string; title?: string }> | undefined,
+): SearchResult[] {
   if (!Array.isArray(results)) return [];
   const mapped: SearchResult[] = [];
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
     if (r == null || r.url == null) continue;
-    mapped.push({ title: r.title || "Source " + (i + 1), url: r.url, snippet: "" });
+    mapped.push({
+      title: r.title || "Source " + (i + 1),
+      url: r.url,
+      snippet: "",
+    });
   }
   return mapped;
 }
 
-function mapApiInlineContent(results: ExaSearchResponse["results"]): ExtractedContent[] {
+function mapApiInlineContent(
+  results: ExaSearchResponse["results"],
+): ExtractedContent[] {
   if (results == null || results.length === 0) return [];
   const out: ExtractedContent[] = [];
   for (const r of results) {
-    if (r != null && r.url != null && typeof r.text === "string" && r.text.length > 0) {
-      out.push({ url: r.url, title: r.title || "", content: r.text, error: null });
+    if (
+      r != null &&
+      r.url != null &&
+      typeof r.text === "string" &&
+      r.text.length > 0
+    ) {
+      out.push({
+        url: r.url,
+        title: r.title || "",
+        content: r.text,
+        error: null,
+      });
     }
   }
   return out;
 }
 
-async function searchWithExaApi(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
+async function searchWithExaApi(
+  query: string,
+  options: SearchOptions = {},
+): Promise<SearchResponse> {
   const apiKey = getExaApiKey()!;
-  const useSearch = options.includeContent
-    || options.recencyFilter != null
-    || (options.domainFilter != null && options.domainFilter.length > 0)
-    || (options.numResults != null && options.numResults !== 5);
+  const useSearch =
+    options.includeContent ||
+    options.recencyFilter != null ||
+    (options.domainFilter != null && options.domainFilter.length > 0) ||
+    (options.numResults != null && options.numResults !== 5);
 
   if (!useSearch) {
     const response = await fetch(EXA_ANSWER_URL, {
@@ -311,13 +428,21 @@ async function searchWithExaApi(query: string, options: SearchOptions = {}): Pro
     });
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error("Exa API error " + response.status + ": " + errorText.slice(0, 300));
+      throw new Error(
+        "Exa API error " + response.status + ": " + errorText.slice(0, 300),
+      );
     }
     const data = (await response.json()) as ExaAnswerResponse;
-    return { answer: data.answer || "", results: mapApiResults(data.citations) };
+    return {
+      answer: data.answer || "",
+      results: mapApiResults(data.citations),
+    };
   }
 
-  const startDate = options.recencyFilter != null ? recencyToStartDate(options.recencyFilter) : null;
+  const startDate =
+    options.recencyFilter != null
+      ? recencyToStartDate(options.recencyFilter)
+      : null;
   const domainFilters = mapDomainFilter(options.domainFilter);
   const numResults = options.numResults != null ? options.numResults : 5;
 
@@ -341,7 +466,9 @@ async function searchWithExaApi(query: string, options: SearchOptions = {}): Pro
   });
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error("Exa API error " + response.status + ": " + errorText.slice(0, 300));
+    throw new Error(
+      "Exa API error " + response.status + ": " + errorText.slice(0, 300),
+    );
   }
   const data = (await response.json()) as ExaSearchResponse;
   const mapped: SearchResponse = {
@@ -357,7 +484,10 @@ async function searchWithExaApi(query: string, options: SearchOptions = {}): Pro
 
 // ─── Public: search ─────────────────────────────────────────────────────────
 
-export async function search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
+export async function search(
+  query: string,
+  options: SearchOptions = {},
+): Promise<SearchResponse> {
   const apiKey = getExaApiKey();
 
   try {
@@ -370,9 +500,11 @@ export async function search(query: string, options: SearchOptions = {}): Promis
   } catch (err) {
     if (isAbortError(err)) throw err;
     throw new Error(
-      "Exa search failed: " + errorMessage(err) + "\n\n" +
-      "Exa MCP provides 1,000 free requests/month with no API key. " +
-      "Set EXA_API_KEY or exaApiKey in ~/.pi/web-search.json for higher limits."
+      "Exa search failed: " +
+        errorMessage(err) +
+        "\n\n" +
+        "Exa MCP provides 1,000 free requests/month with no API key. " +
+        "Set EXA_API_KEY or exaApiKey in ~/.pi/web-search.json for higher limits.",
     );
   }
 }

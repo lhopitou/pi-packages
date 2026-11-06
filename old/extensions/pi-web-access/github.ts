@@ -1,5 +1,12 @@
 import { execSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { getGitHubCloneConfig } from "./config.js";
@@ -78,14 +85,21 @@ function repoKey(owner: string, repo: string): string {
 
 // ─── Repo size check (GitHub API) ───────────────────────────────────────────
 
-async function getRepoSize(owner: string, repo: string, signal?: AbortSignal): Promise<number | null> {
+async function getRepoSize(
+  owner: string,
+  repo: string,
+  signal?: AbortSignal,
+): Promise<number | null> {
   try {
     const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
       headers: { "User-Agent": "PiAgent/1.0" },
-      signal: AbortSignal.any([AbortSignal.timeout(10000), ...(signal ? [signal] : [])]),
+      signal: AbortSignal.any([
+        AbortSignal.timeout(10000),
+        ...(signal ? [signal] : []),
+      ]),
     });
     if (!res.ok) return null;
-    const data = await res.json() as { size?: number };
+    const data = (await res.json()) as { size?: number };
     return typeof data.size === "number" ? data.size : null; // size in KB
   } catch {
     return null;
@@ -94,13 +108,20 @@ async function getRepoSize(owner: string, repo: string, signal?: AbortSignal): P
 
 // ─── Clone repo ─────────────────────────────────────────────────────────────
 
-async function cloneRepo(owner: string, repo: string, signal?: AbortSignal): Promise<string> {
+async function cloneRepo(
+  owner: string,
+  repo: string,
+  signal?: AbortSignal,
+): Promise<string> {
   const config = getGitHubCloneConfig();
   const key = repoKey(owner, repo);
 
   if (cloneCache.has(key)) return cloneCache.get(key)!;
 
-  const clonePath = join(config.clonePath || "/tmp/pi-github-repos", `${owner}-${repo}`);
+  const clonePath = join(
+    config.clonePath || "/tmp/pi-github-repos",
+    `${owner}-${repo}`,
+  );
   if (existsSync(clonePath)) {
     cloneCache.set(key, clonePath);
     return clonePath;
@@ -114,12 +135,14 @@ async function cloneRepo(owner: string, repo: string, signal?: AbortSignal): Pro
   if (sizeKB !== null && sizeKB > maxSizeMB * 1024) {
     throw new Error(
       `Repo ${key} is ${Math.round(sizeKB / 1024)}MB, exceeding ${maxSizeMB}MB limit. ` +
-      `Use forceClone: true to override.`
+        `Use forceClone: true to override.`,
     );
   }
 
   const url = `https://github.com/${owner}/${repo}.git`;
-  const timeout = (config.cloneTimeoutSeconds != null ? config.cloneTimeoutSeconds : 30) * 1000;
+  const timeout =
+    (config.cloneTimeoutSeconds != null ? config.cloneTimeoutSeconds : 30) *
+    1000;
 
   try {
     execSync(`git clone --depth 1 ${url} ${owner}-${repo}`, {
@@ -137,7 +160,12 @@ async function cloneRepo(owner: string, repo: string, signal?: AbortSignal): Pro
 
 // ─── File tree listing ──────────────────────────────────────────────────────
 
-function listDirectory(dirPath: string, prefix: string = "", depth: number = 0, maxDepth: number = 3): string {
+function listDirectory(
+  dirPath: string,
+  prefix: string = "",
+  depth: number = 0,
+  maxDepth: number = 3,
+): string {
   if (depth > maxDepth) return `${prefix}...\n`;
   const entries = readdirSync(dirPath, { withFileTypes: true })
     .filter((d) => !d.name.startsWith(".") && d.name !== "node_modules")
@@ -165,13 +193,23 @@ function listDirectory(dirPath: string, prefix: string = "", depth: number = 0, 
 // ─── GitHub API fallback (for commit SHAs, large repos) ────────────────────
 
 async function fetchFromGitHubAPI(
-  owner: string, repo: string, path: string, ref: string, signal?: AbortSignal,
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const refPart = ref ? `?ref=${ref}` : "";
   const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}${refPart}`;
   const res = await fetch(url, {
-    headers: { "User-Agent": "PiAgent/1.0", Accept: "application/vnd.github.v3+json" },
-    signal: AbortSignal.any([AbortSignal.timeout(15000), ...(signal ? [signal] : [])]),
+    headers: {
+      "User-Agent": "PiAgent/1.0",
+      Accept: "application/vnd.github.v3+json",
+    },
+    signal: AbortSignal.any([
+      AbortSignal.timeout(15000),
+      ...(signal ? [signal] : []),
+    ]),
   });
 
   if (!res.ok) {
@@ -179,10 +217,17 @@ async function fetchFromGitHubAPI(
     throw new Error(`GitHub API ${res.status}: ${errText.slice(0, 300)}`);
   }
 
-  const data = await res.json() as Array<{ name: string; type: string; path: string; download_url?: string }> | { name: string; content?: string; type: string; download_url?: string };
+  const data = (await res.json()) as
+    | Array<{ name: string; type: string; path: string; download_url?: string }>
+    | { name: string; content?: string; type: string; download_url?: string };
 
   if (Array.isArray(data)) {
-    return `## Directory: ${path || "/"}\n\n` + data.map((item) => `${item.type === "dir" ? "📁" : "📄"} ${item.name}`).join("\n");
+    return (
+      `## Directory: ${path || "/"}\n\n` +
+      data
+        .map((item) => `${item.type === "dir" ? "📁" : "📄"} ${item.name}`)
+        .join("\n")
+    );
   }
 
   if (data.content) {
@@ -202,19 +247,32 @@ async function fetchFromGitHubAPI(
 // ─── Commit SHA via API ─────────────────────────────────────────────────────
 
 async function fetchCommitFromAPI(
-  owner: string, repo: string, sha: string, signal?: AbortSignal,
+  owner: string,
+  repo: string,
+  sha: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const url = `https://api.github.com/repos/${owner}/${repo}/commits/${sha}`;
   const res = await fetch(url, {
     headers: { "User-Agent": "PiAgent/1.0" },
-    signal: AbortSignal.any([AbortSignal.timeout(15000), ...(signal ? [signal] : [])]),
+    signal: AbortSignal.any([
+      AbortSignal.timeout(15000),
+      ...(signal ? [signal] : []),
+    ]),
   });
 
   if (!res.ok) throw new Error(`GitHub API ${res.status} for commit ${sha}`);
 
-  const data = await res.json() as {
-    sha: string; commit: { message: string; author: { name: string; date: string } };
-    files?: Array<{ filename: string; status: string; additions: number; deletions: number; patch?: string }>;
+  const data = (await res.json()) as {
+    sha: string;
+    commit: { message: string; author: { name: string; date: string } };
+    files?: Array<{
+      filename: string;
+      status: string;
+      additions: number;
+      deletions: number;
+      patch?: string;
+    }>;
   };
 
   let output = `## Commit ${data.sha.slice(0, 7)}\n\n`;
@@ -225,7 +283,8 @@ async function fetchCommitFromAPI(
     output += "### Changed files\n\n";
     for (const f of data.files.slice(0, 20)) {
       output += `- \`${f.filename}\` (+${f.additions}/-${f.deletions}) ${f.status}\n`;
-      if (f.patch) output += `\n\`\`\`diff\n${f.patch.slice(0, 1000)}\n\`\`\`\n`;
+      if (f.patch)
+        output += `\n\`\`\`diff\n${f.patch.slice(0, 1000)}\n\`\`\`\n`;
     }
   }
 
@@ -235,10 +294,13 @@ async function fetchCommitFromAPI(
 // ─── Public: extractGitHub ───────────────────────────────────────────────────
 
 export async function extractGitHub(
-  url: string, signal?: AbortSignal, forceClone?: boolean,
+  url: string,
+  signal?: AbortSignal,
+  forceClone?: boolean,
 ): Promise<ExtractedContent> {
   const parsed = parseGitHubURL(url);
-  if (!parsed) return { url, title: "", content: "", error: "Could not parse GitHub URL" };
+  if (!parsed)
+    return { url, title: "", content: "", error: "Could not parse GitHub URL" };
 
   const { owner, repo, type, ref, path } = parsed;
   const fullName = `${owner}/${repo}`;
@@ -247,9 +309,19 @@ export async function extractGitHub(
   if (type === "commit") {
     try {
       const content = await fetchCommitFromAPI(owner, repo, ref, signal);
-      return { url, title: `Commit ${ref.slice(0, 7)} - ${fullName}`, content, error: null };
+      return {
+        url,
+        title: `Commit ${ref.slice(0, 7)} - ${fullName}`,
+        content,
+        error: null,
+      };
     } catch (err) {
-      return { url, title: "", content: "", error: `GitHub commit API failed: ${errorMessage(err)}` };
+      return {
+        url,
+        title: "",
+        content: "",
+        error: `GitHub commit API failed: ${errorMessage(err)}`,
+      };
     }
   }
 
@@ -265,7 +337,13 @@ export async function extractGitHub(
       if (type === "blob" && path) {
         content = await fetchFromGitHubAPI(owner, repo, path, ref, signal);
       } else {
-        content = await fetchFromGitHubAPI(owner, repo, path || "", ref || "", signal);
+        content = await fetchFromGitHubAPI(
+          owner,
+          repo,
+          path || "",
+          ref || "",
+          signal,
+        );
       }
       return {
         url,
@@ -274,7 +352,12 @@ export async function extractGitHub(
         error: null,
       };
     } catch (err) {
-      return { url, title: "", content: "", error: `GitHub API fallback failed: ${errorMessage(err)}` };
+      return {
+        url,
+        title: "",
+        content: "",
+        error: `GitHub API fallback failed: ${errorMessage(err)}`,
+      };
     }
   }
 
@@ -283,13 +366,25 @@ export async function extractGitHub(
   try {
     localPath = await cloneRepo(owner, repo, signal);
   } catch (err) {
-    if (isAbortError(err)) return { url, title: "", content: "", error: "Aborted" };
+    if (isAbortError(err))
+      return { url, title: "", content: "", error: "Aborted" };
     // Clone failed → try API fallback
     try {
-      const content = await fetchFromGitHubAPI(owner, repo, path || "", ref || "", signal);
+      const content = await fetchFromGitHubAPI(
+        owner,
+        repo,
+        path || "",
+        ref || "",
+        signal,
+      );
       return { url, title: `${fullName} (API fallback)`, content, error: null };
     } catch (apiErr) {
-      return { url, title: "", content: "", error: `Clone and API both failed: ${errorMessage(err)}` };
+      return {
+        url,
+        title: "",
+        content: "",
+        error: `Clone and API both failed: ${errorMessage(err)}`,
+      };
     }
   }
 
@@ -306,7 +401,12 @@ export async function extractGitHub(
   if (type === "tree" && path) {
     const dirPath = resolve(localPath, path);
     if (!existsSync(dirPath)) {
-      return { url, title: fullName, content: `Directory not found: ${path}\n\nLocal clone: \`${localPath}\``, error: null };
+      return {
+        url,
+        title: fullName,
+        content: `Directory not found: ${path}\n\nLocal clone: \`${localPath}\``,
+        error: null,
+      };
     }
     return {
       url,
@@ -319,7 +419,12 @@ export async function extractGitHub(
   if (type === "blob" && path) {
     const filePath = resolve(localPath, path);
     if (!existsSync(filePath)) {
-      return { url, title: fullName, content: `File not found: ${path}\n\nLocal clone: \`${localPath}\``, error: null };
+      return {
+        url,
+        title: fullName,
+        content: `File not found: ${path}\n\nLocal clone: \`${localPath}\``,
+        error: null,
+      };
     }
     const stat = statSync(filePath);
     if (stat.size > 100_000) {
@@ -339,11 +444,23 @@ export async function extractGitHub(
   }
 
   // Fallback
-  return { url, title: fullName, content: `Cloned to: \`${localPath}\``, error: null };
+  return {
+    url,
+    title: fullName,
+    content: `Cloned to: \`${localPath}\``,
+    error: null,
+  };
 }
 
 function findReadme(dirPath: string): string | null {
-  const names = ["README.md", "README.MD", "Readme.md", "README.rst", "README.txt", "README"];
+  const names = [
+    "README.md",
+    "README.MD",
+    "Readme.md",
+    "README.rst",
+    "README.txt",
+    "README",
+  ];
   for (const name of names) {
     const p = join(dirPath, name);
     if (existsSync(p)) return p;

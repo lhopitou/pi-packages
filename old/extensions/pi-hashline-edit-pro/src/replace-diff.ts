@@ -1,9 +1,5 @@
 import * as Diff from "diff";
-import {
-  computeLineHashes,
-  ANCHOR_LENGTH,
-} from "./hashline";
-
+import { computeLineHashes, ANCHOR_LENGTH } from "./hashline";
 
 export function detectLineEnding(content: string): "\r\n" | "\n" {
   const crlfIdx = content.indexOf("\r\n");
@@ -28,7 +24,6 @@ export function stripBom(content: string): { bom: string; text: string } {
     ? { bom: "\uFEFF", text: content.slice(1) }
     : { bom: "", text: content };
 }
-
 
 function formatDiffPreviewLine(
   prefix: " " | "+" | "-",
@@ -69,9 +64,7 @@ export function generateDiffString(
           output.push(formatDiffPreviewLine("+", line, hash));
           newLineNum++;
         } else {
-          output.push(
-            formatDiffPreviewLine("-", line, undefined),
-          );
+          output.push(formatDiffPreviewLine("-", line, undefined));
           oldLineNum++;
         }
       }
@@ -181,10 +174,13 @@ export function buildCompactHashlineDiffPreview(
   let addedLines = 0;
   let removedLines = 0;
 
-  for (let index = 0; index < lines.length; ) {
+  for (let index = 0; index < lines.length;) {
     const kind = classifyDiffPreviewLine(lines[index]!);
     let end = index + 1;
-    while (end < lines.length && classifyDiffPreviewLine(lines[end]!) === kind) {
+    while (
+      end < lines.length &&
+      classifyDiffPreviewLine(lines[end]!) === kind
+    ) {
       end += 1;
     }
 
@@ -192,14 +188,20 @@ export function buildCompactHashlineDiffPreview(
     switch (kind) {
       case "addition":
         addedLines += run.length;
-        previewLines.push(...collapseDiffPreviewRun(run, maxAdditionRun, "added"));
+        previewLines.push(
+          ...collapseDiffPreviewRun(run, maxAdditionRun, "added"),
+        );
         break;
       case "deletion":
         removedLines += run.length;
-        previewLines.push(...collapseDiffPreviewRun(run, maxDeletionRun, "removed"));
+        previewLines.push(
+          ...collapseDiffPreviewRun(run, maxDeletionRun, "removed"),
+        );
         break;
       case "context":
-        previewLines.push(...collapseDiffPreviewRun(run, maxUnchangedRun, "unchanged"));
+        previewLines.push(
+          ...collapseDiffPreviewRun(run, maxUnchangedRun, "unchanged"),
+        );
         break;
       default:
         previewLines.push(...run);

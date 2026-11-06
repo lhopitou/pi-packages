@@ -34,7 +34,9 @@ export function loadConfig(): WebSearchConfig {
   }
 
   try {
-    const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as Partial<WebSearchConfig>;
+    const raw = JSON.parse(
+      readFileSync(CONFIG_PATH, "utf-8"),
+    ) as Partial<WebSearchConfig>;
     cached = {
       ...DEFAULT_CONFIG,
       ...raw,
@@ -55,10 +57,12 @@ export function getExaApiKey(): string | null {
   if (env && env.length > 0) return env;
   const cfgRaw = loadConfig().exaApiKey;
   const cfg = cfgRaw != null ? String(cfgRaw).trim() : null;
-  return (cfg && cfg.length > 0) ? cfg : null;
+  return cfg && cfg.length > 0 ? cfg : null;
 }
 
-export function getGitHubCloneConfig(): NonNullable<WebSearchConfig["githubClone"]> {
+export function getGitHubCloneConfig(): NonNullable<
+  WebSearchConfig["githubClone"]
+> {
   const val = loadConfig().githubClone;
   return val != null ? val : DEFAULT_CONFIG.githubClone!;
 }
