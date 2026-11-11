@@ -79,9 +79,22 @@ export function positionAtFirstUnanswered(state: WizardState): void {
   resetCursor(state);
 }
 
+/**
+ * A required question is satisfied by a chosen option/value OR by non-empty
+ * remarks — the user can explain "none of the above" instead of picking one.
+ */
+function requiredSatisfied(
+  state: WizardState,
+  question: NormalizedQuestion,
+): boolean {
+  if (isAnswered(question, state.answers)) return true;
+  const remark = state.remarks.get(question.id);
+  return remark !== undefined && remark.trim().length > 0;
+}
+
 function missingRequired(state: WizardState): NormalizedQuestion[] {
   return state.form.questions.filter(
-    (question) => question.required && !isAnswered(question, state.answers),
+    (question) => question.required && !requiredSatisfied(state, question),
   );
 }
 
@@ -384,9 +397,10 @@ function createWizardComponent(
     }
     lines.push("");
 
-    const answered = isAnswered(question, state.answers);
     const marker =
-      question.required && !answered ? theme.fg("warning", " *") : "";
+      question.required && !requiredSatisfied(state, question)
+        ? theme.fg("warning", " *")
+        : "";
     const promptPrefix = state.editing ? "  " : theme.fg("accent", "> ");
     const promptColor = state.editing ? "text" : "accent";
     addWrappedWithPrefix(

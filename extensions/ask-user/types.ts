@@ -48,7 +48,7 @@ const QuestionSchema = Type.Object({
   required: Type.Optional(
     Type.Boolean({
       description:
-        "Whether the question must be answered before submitting. Default: true.",
+        "Whether the question must be answered before submitting. Non-empty remarks also satisfy a required question (no choice needed). Default: true.",
     }),
   ),
 });
@@ -91,7 +91,11 @@ export interface QuestionnaireForm {
   questions: NormalizedQuestion[];
 }
 
-/** A question is answered when its value is non-empty (multi: at least one choice). Remarks never count as answers. */
+/**
+ * A question is answered when its value is non-empty (multi: at least one choice).
+ * Remarks never count as answers — they only satisfy the required gate (see
+ * wizard.ts), not progress dots or positioning.
+ */
 export function isAnsweredValue(value: AnswerValue | undefined): boolean {
   if (value === undefined) return false;
   if (Array.isArray(value)) return value.length > 0;

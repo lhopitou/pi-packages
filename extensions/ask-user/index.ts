@@ -145,7 +145,7 @@ export default function askUserExtension(pi: ExtensionAPI): void {
     label: "Ask user",
     description:
       "Ask the user questions through an interactive questionnaire (blocking full-screen wizard in the terminal, one question per page). " +
-      "Supports single-select, multi-select (checkbox), and free-text questions; every choice question also gets a free-text remarks field. " +
+      "Supports single-select, multi-select (checkbox), and free-text questions; every choice question also gets a free-text remarks field, and non-empty remarks satisfy a required question. " +
       "Blocks the current run until the user submits or interrupts. On completion you receive the answers keyed by question id " +
       "(choice answers include their remarks). " +
       "If the user interrupts, progress is saved to disk, the agent loop aborts, and the user resumes later via /questionnaire — the answers then arrive as a user message. " +
