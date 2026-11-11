@@ -6,7 +6,9 @@
  * 1. Reporter mode (worktree agent): active when PI_WORKTREE_STATUS_DIR and
  *    PI_WORKTREE_HANDLE are set (done by the worktree skill's spawn command).
  *    Writes a status JSON file on session/agent events and renames its own
- *    tab+pane (zellij) or window (tmux) with a ●/✓ state marker.
+ *    tab+pane (zellij) or window (tmux) with a ●/✓ state marker. Markers are
+ *    hidden in zellij (zellij ≥0.46 draws its own from pi's OSC 7501
+ *    program status) and while terminal progress (OSC 9;4) is enabled.
  *
  * 2. Coordinator mode (main session): active when the env vars are absent.
  *    Registers `worktree_status` and `worktree_wait` tools that read the
@@ -169,7 +171,23 @@ function registerReporter(pi: ExtensionAPI) {
     }
   }
 
+  /**
+   * Whether the ●/✓ rename markers should be drawn at all.
+   *
+   * - Zellij consumes pi's OSC 7501 program status and draws its own
+   *   working/needs-you/done markers in the tab bar, making our rename
+   *   redundant — hide the marker whenever zellij is the mux.
+   * - Otherwise, OSC 9;4 terminal progress (settings:
+   *   `terminal.showTerminalProgress`) already animates the tab title with
+   *   the run state — renaming would fight it, so stay hands-off too.
+   */
+  function renamingEnabled(): boolean {
+    if (mux === "zellij") return false;
+    return true;
+  }
+
   async function rename(marker: string) {
+    if (!renamingEnabled()) return;
     const label = `${marker} wt-${HANDLE}`;
     if (mux === "zellij" && paneTarget) {
       await run("zellij", [

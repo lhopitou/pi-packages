@@ -8,7 +8,7 @@ vars — nothing to configure.
 
 | Mode | When | What it does |
 |---|---|---|
-| **Reporter** | `PI_WORKTREE_STATUS_DIR` **and** `PI_WORKTREE_HANDLE` env vars set | Writes the agent's status file on session/agent events; renames its own tab+pane (zellij) or window (tmux) `● wt-<handle>` (working) / `✓ wt-<handle>` (done) |
+| **Reporter** | `PI_WORKTREE_STATUS_DIR` **and** `PI_WORKTREE_HANDLE` env vars set | Writes the agent's status file on session/agent events; renames its own window (tmux) `● wt-<handle>` (working) / `✓ wt-<handle>` (done). In zellij the rename markers are hidden: zellij ≥0.46 draws its own working/needs-you/done markers from pi's OSC 7501 program status |
 | **Coordinator** | env vars absent | Registers `worktree_status` and `worktree_wait` tools |
 
 The worktree skill's spawn command sets the env vars when launching pi in a
@@ -25,9 +25,16 @@ automatically; your main sessions run in coordinator mode.
   (zellij) or `$TMUX_PANE` (tmux). No configuration.
 - Must run inside zellij or tmux for rename display; without a multiplexer the
   reporter still writes status files but cannot rename anything.
+- Renaming is skipped while `terminal.showTerminalProgress` is enabled: the
+  OSC 9;4 progress spinner already marks the tab, and a rename would fight it.
+  Status files are still written.
 - Zellij pane names are only drawn in pane frames (multi-pane tabs), so the
   reporter also renames the tab — resolved via `list-panes --tab --json` →
   `rename-tab --tab-id` — making the marker visible in the tab bar.
+- Rename markers are hidden in zellij (redundant with zellij ≥0.46's own
+  OSC 7501-driven markers) and while `terminal.showTerminalProgress` is
+  enabled (the OSC 9;4 spinner would fight the rename). Status files are
+  always written.
 
 ## Status file schema
 
