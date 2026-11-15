@@ -77,7 +77,7 @@ Before working on a patch:
 
 ## Development repo workflow
 
-This skill lives in the `pi-packages` repo (`~/pi-packages`). All Pi extensions and skills are developed here and symlinked into `~/.pi/agent/` so Pi's auto-discovery picks them up.
+This skill lives in the `pi-packages` repo (`~/pi-packages`). All Pi extensions and skills are developed here.
 
 ### Where to create artifacts
 
@@ -90,50 +90,6 @@ This skill lives in the `pi-packages` repo (`~/pi-packages`). All Pi extensions 
 | Prompt template | `~/pi-packages/prompts/<name>.md` | `~/.pi/agent/prompts/<name>.md` → source |
 | Theme | `~/pi-packages/themes/<name>.json` | `~/.pi/agent/themes/<name>.json` → source |
 
-### Symlink commands
-
-After creating a new artifact in the repo, create the symlink so Pi discovers it:
-
-```bash
-# Extension (single file)
-ln -sf ~/pi-packages/extensions/<name>.ts ~/.pi/agent/extensions/<name>.ts
-
-# Extension (directory)
-ln -sfn ~/pi-packages/extensions/<name> ~/.pi/agent/extensions/<name>
-
-# Agent Skill (global scope) — the entire skills/ directory is symlinked
-# Only needed once; new skills added under ~/pi-packages/skills/ are picked up automatically
-ln -sfn ~/pi-packages/skills ~/.pi/agent/skills
-
-# Prompt template
-ln -sf ~/pi-packages/prompts/<name>.md ~/.pi/agent/prompts/<name>.md
-
-# Theme
-ln -sf ~/pi-packages/themes/<name>.json ~/.pi/agent/themes/<name>.json
-```
-
-Use `ln -sf` for files and `ln -sfn` for directories (the `-n` flag treats an existing symlink as a file, avoiding nested-link issues).
-
-**Project-scope skills** (under `~/pi-packages/.pi/skills/`) are discovered by Pi automatically when the project is trusted — no symlink needed.
-
-### Registering extensions in package.json
-
-Extensions must also be listed in `~/pi-packages/package.json` under `pi.extensions` so `pi install` and `pi --list-models` can discover them. Skills are listed under `pi.skills`.
-
-```jsonc
-// package.json → pi key
-{
-  "pi": {
-    "extensions": [
-      "./extensions/my-extension.ts",
-      "./extensions/my-dir-extension"
-    ],
-    "skills": [
-      "./skills"
-    ]
-  }
-}
-```
 
 ### After changes
 
