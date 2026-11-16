@@ -1,5 +1,6 @@
 /**
- * tool — the `mux` tool: one declaration, an `action` enum, flat optional
+ * tool — the `mux` tool and its human-invoked twin, the `/broadcast`
+ * slash command. The tool: one declaration, an `action` enum, flat optional
  * parameters, and cross-validation in `execute()` returning instructive
  * errors so the model self-corrects in one turn.
  *
@@ -53,6 +54,9 @@ export interface MuxDetails {
   summary?: string;
   pruned?: string[];
   delivery?: string;
+  /** Broadcast fan-out: per-pane outcomes. */
+  deliveredTo?: string[];
+  failed?: string[];
   handle?: string;
   sessionId?: string;
   /** Spawned pane id (bare number), when a pane was created. */
@@ -70,10 +74,26 @@ interface Probe {
   final: string;
 }
 
+/** One broadcast fan-out outcome, shared by the tool action and the
+ *  `/broadcast` slash command. */
+interface BroadcastOutcome {
+  /** Full multi-line per-pane report. */
+  report: string;
+  deliveredTo: string[];
+  failed: string[];
+  /** Prune receipts from the scan. */
+  pruned: string[];
+  /** Fan-out target count (0 → nothing to deliver to, not an error). */
+  targetCount: number;
+}
+
 const parameters = Type.Object({
-  action: StringEnum(["list", "send", "read", "spawn", "stop"] as const, {
-    description: "What to do (see the tool description).",
-  }),
+  action: StringEnum(
+    ["list", "send", "broadcast", "read", "spawn", "stop"] as const,
+    {
+      description: "What to do (see the tool description).",
+    },
+  ),
   pane: Type.Optional(
     Type.String({
       description:
@@ -83,7 +103,7 @@ const parameters = Type.Object({
   text: Type.Optional(
     Type.String({
       description:
-        "send: message body. Delivered verbatim — keep it brief; bulk data travels by file path.",
+        "send/broadcast: message body. Delivered verbatim — keep it brief; bulk data travels by file path.",
     }),
   ),
   view: Type.Optional(
@@ -157,6 +177,15 @@ function truncate(text: string, max: number): string {
   return flat.length > max ? flat.slice(0, max - 1) + "…" : flat;
 }
 
+/** First text part of a result's content; "" when none (reach errors are
+ *  text-shaped, but the content union admits image parts). */
+function textOf(content: MuxResult["content"]): string {
+  for (const part of content) {
+    if (part.type === "text") return part.text;
+  }
+  return "";
+}
+
 function isConnRefused(err: unknown): boolean {
   return (err as NodeJS.ErrnoException | undefined)?.code === "ECONNREFUSED";
 }
@@ -187,7 +216,7 @@ function tailLines(text: string): string {
 
 // ── the tool ───────────────────────────────────────────────────────────
 
-export function registerMuxTool(pi: ExtensionAPI, deps: MuxToolDeps): void {
+export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
   /** Hot path: resolve a target descriptor, verifying liveness. Never
    *  spawns a zellij process. */
   function reach(
@@ -256,9 +285,13 @@ export function registerMuxTool(pi: ExtensionAPI, deps: MuxToolDeps): void {
 
   // ── actions ────────────────────────────────────────────────────────
 
-  /** list: cold path — correlates every descriptor against list-panes and
-   *  prunes on either failed signal. */
-  async function doList(): Promise<MuxResult> {
+  /** Cold path: correlate every descriptor against list-panes and prune on
+   *  either failed signal. Shared by list (render) and broadcast (fan-out). */
+  async function scanAgents(): Promise<{
+    panes: zellij.ZellijPane[];
+    agents: Map<string, mux.MuxDescriptor>;
+    pruned: string[];
+  }> {
     const sessionName = deps.sessionName!;
     const panes = (await zellij.listPanes()).filter((p) => !p.is_plugin);
     const descriptors = mux.listDescriptors(mux.muxDir(sessionName));
@@ -289,6 +322,12 @@ export function registerMuxTool(pi: ExtensionAPI, deps: MuxToolDeps): void {
         : `pid ${entry.descriptor.pid} dead`;
       pruned.push(`pane ${entry.paneId} (${reason})`);
     }
+    return { panes, agents, pruned };
+  }
+
+  /** list: cold path — scan, prune, render. */
+  async function doList(): Promise<MuxResult> {
+    const { panes, agents, pruned } = await scanAgents();
 
     // Render live agents only. Bare panes are not mux-addressable, so
     // listing them is noise — the scan above still verifies them
@@ -308,7 +347,7 @@ export function registerMuxTool(pi: ExtensionAPI, deps: MuxToolDeps): void {
       );
     }
     lines.unshift(
-      `zellij session "${sessionName}" — ${lines.length} live mux agent(s)` +
+      `zellij session "${deps.sessionName}" — ${lines.length} live mux agent(s)` +
         (hidden ? ` (${hidden} non-agent pane(s) hidden)` : "") +
         ":",
     );
@@ -318,11 +357,21 @@ export function registerMuxTool(pi: ExtensionAPI, deps: MuxToolDeps): void {
     return result(lines.join("\n"), { action: "list", pruned });
   }
 
-  /** send: socket delivery, connect–send–close. */
-  async function doSend(pane: string, text: string): Promise<MuxResult> {
-    const reached = reach(pane);
-    if (!reached.ok) return reached.error;
-    const { paneId, descriptor } = reached;
+  /** Core message delivery against a verified peer: connect–send–close.
+   *  Shared by send (single pane) and broadcast (fan-out); callers render.
+   *  `retry` marks retry-window failures (connect refused / token
+   *  mismatch with a live pid) for the fuller retryWindow text.
+   *  `human` messages (the /broadcast command) arrive verbatim, like
+   *  a regular user message — see MessageRequest. */
+  async function deliverMessage(
+    paneId: string,
+    descriptor: mux.MuxDescriptor,
+    text: string,
+    opts?: { human?: boolean },
+  ): Promise<
+    | { ok: true; delivery: "turn" | "steer" }
+    | { ok: false; retry: boolean; error: string }
+  > {
     let reply: mux.MuxReply;
     try {
       reply = await mux.muxRequest(descriptor.socketPath, {
@@ -331,46 +380,158 @@ export function registerMuxTool(pi: ExtensionAPI, deps: MuxToolDeps): void {
         fromPane: deps.ownPaneId ?? "(unknown)",
         fromSessionName: deps.sessionName ?? "(unknown)",
         text,
+        human: opts?.human,
       });
     } catch (err) {
-      if (isConnRefused(err)) {
-        return retryWindow(
-          paneId,
-          descriptor.pid,
-          `could not connect to pane ${paneId}'s mux listener (connection refused).`,
-        );
-      }
-      return result(
-        `delivery failed: ${errText(err)}`,
-        { action: "send", pane: paneId },
-        true,
-      );
+      return isConnRefused(err)
+        ? {
+            ok: false,
+            retry: true,
+            error: `could not connect to pane ${paneId}'s mux listener (connection refused).`,
+          }
+        : {
+            ok: false,
+            retry: false,
+            error: `delivery failed: ${errText(err)}`,
+          };
     }
     if (reply.type === "error") {
-      if (reply.error.includes("token mismatch")) {
-        return retryWindow(
-          paneId,
-          descriptor.pid,
-          `token mismatch — pane ${paneId} reloaded with a fresh token mid-delivery.`,
-        );
-      }
-      return result(
-        `delivery failed: ${reply.error}`,
-        { action: "send", pane: paneId },
-        true,
-      );
+      return reply.error.includes("token mismatch")
+        ? {
+            ok: false,
+            retry: true,
+            error: `token mismatch — pane ${paneId} reloaded with a fresh token mid-delivery.`,
+          }
+        : { ok: false, retry: false, error: `delivery failed: ${reply.error}` };
+    }
+    return {
+      ok: true,
+      delivery:
+        reply.type === "ok" && reply.delivery === "steer" ? "steer" : "turn",
+    };
+  }
+
+  /** send: socket delivery to one pane, connect–send–close. */
+  async function doSend(pane: string, text: string): Promise<MuxResult> {
+    const reached = reach(pane);
+    if (!reached.ok) return reached.error;
+    const { paneId, descriptor } = reached;
+    const outcome = await deliverMessage(paneId, descriptor, text);
+    if (!outcome.ok) {
+      return outcome.retry
+        ? retryWindow(paneId, descriptor.pid, outcome.error)
+        : result(outcome.error, { action: "send", pane: paneId }, true);
     }
     const how =
-      reply.type === "ok" && reply.delivery === "steer"
+      outcome.delivery === "steer"
         ? "the peer was busy — steered its current run (enters after the current assistant turn)"
         : "the peer was idle — started a turn";
     return result(
       `Delivered to pane ${paneId} (zellij session "${descriptor.sessionName}", pid ${descriptor.pid}): ${how}.`,
+      { action: "send", pane: paneId, delivery: outcome.delivery },
+    );
+  }
+
+  /** Broadcast core shared by the tool's `broadcast` action (own pane
+   *  excluded — self-delivery would inject into the sender's own run) and
+   *  the `/broadcast` slash command (own pane included — the human wants
+   *  this pane's agent to receive it too, and verbatim — a `human`
+   *  message arrives as a regular user message, no `[mux]` prefix). The
+   *  list action's scan and pruning, a fresh reach per target, per-pane
+   *  outcomes: a peer failing mid-fan-out (reload window, death) is
+   *  reported, not fatal. */
+  async function runBroadcast(
+    text: string,
+    opts: { includeSelf: boolean; human?: boolean },
+  ): Promise<BroadcastOutcome> {
+    const { panes, agents, pruned } = await scanAgents();
+    const targets = panes
+      .map((p) => String(p.id))
+      .filter(
+        (id) => (opts.includeSelf || id !== deps.ownPaneId) && agents.has(id),
+      );
+
+    if (targets.length === 0) {
+      return {
+        report:
+          `No ${opts.includeSelf ? "" : "other "}live mux agents in zellij session "${deps.sessionName}" — nothing to broadcast.` +
+          (pruned.length
+            ? `\npruned stale descriptors: ${pruned.join("; ")}`
+            : ""),
+        deliveredTo: [],
+        failed: [],
+        pruned,
+        targetCount: 0,
+      };
+    }
+
+    const deliveredTo: string[] = [];
+    const failed: string[] = [];
+    const lines: string[] = [];
+    for (const paneId of targets) {
+      // Per-target reach: fresh descriptor per delivery, so a peer that
+      // reloaded between scan and send is picked up, not failed.
+      const reached = reach(paneId);
+      if (!reached.ok) {
+        failed.push(paneId);
+        lines.push(
+          `  pane ${paneId}: NOT delivered — ${truncate(
+            textOf(reached.error.content) || "unreachable",
+            160,
+          )}`,
+        );
+        continue;
+      }
+      const outcome = await deliverMessage(paneId, reached.descriptor, text, {
+        human: opts.human,
+      });
+      if (outcome.ok) {
+        deliveredTo.push(paneId);
+        lines.push(
+          `  pane ${paneId}: delivered (${
+            outcome.delivery === "steer"
+              ? "busy — steered its current run"
+              : "idle — started a turn"
+          })${deps.ownPaneId === paneId ? " ← you" : ""}`,
+        );
+      } else {
+        failed.push(paneId);
+        lines.push(
+          `  pane ${paneId}: NOT delivered — ${truncate(outcome.error, 160)}` +
+            (outcome.retry
+              ? " (retry window: the peer's pid is alive — it likely just reloaded; retry after a moment)"
+              : ""),
+        );
+      }
+    }
+    const head =
+      `Broadcast "${truncate(text, 80)}" to ${deliveredTo.length}/${targets.length} live mux agent(s) of zellij session "${deps.sessionName}"` +
+      (pruned.length
+        ? ` (${pruned.length} stale descriptor(s) pruned during the scan)`
+        : "") +
+      (failed.length ? ` — ${failed.length} failed:` : ":");
+    return {
+      report: [head, ...lines].join("\n"),
+      deliveredTo,
+      failed,
+      pruned,
+      targetCount: targets.length,
+    };
+  }
+
+  /** broadcast action: every live mux agent except this pane. Only total
+   *  failure is an error — an empty agent set is a plain report. */
+  async function doBroadcast(text: string): Promise<MuxResult> {
+    const outcome = await runBroadcast(text, { includeSelf: false });
+    return result(
+      outcome.report,
       {
-        action: "send",
-        pane: paneId,
-        delivery: reply.type === "ok" ? reply.delivery : undefined,
+        action: "broadcast",
+        deliveredTo: outcome.deliveredTo,
+        failed: outcome.failed.length ? outcome.failed : undefined,
+        pruned: outcome.pruned,
       },
+      outcome.targetCount > 0 && outcome.failed.length === outcome.targetCount,
     );
   }
 
@@ -708,14 +869,15 @@ export function registerMuxTool(pi: ExtensionAPI, deps: MuxToolDeps): void {
       "Agent-to-agent messaging inside the current mux session. " +
       "list: the session's live mux agents (stale descriptors are verified and pruned; bare panes are hidden). " +
       "send pane text: deliver a message that arrives as a user message in the target pane — turn if idle, steered mid-run if busy. " +
+      "broadcast text: deliver one message to every live mux agent at once (the list action's agent set; your own pane excluded) — per-pane outcomes reported. " +
       "read pane: inspect a peer on demand — view=state (live tool call, streaming tail, last messages), view=screen (raw dump; also works on non-agent panes); with wait_for, block until a regex matches. " +
       "spawn: create a new agent pane/tab with env forwarding and a task file (fire-and-forget). " +
       "stop: abort (Ctrl-c if mid-run) and close a pane. " +
       'Panes are addressed by bare pane number ("17" ≡ "terminal_17"); titles never address anything.',
     promptSnippet:
-      "message, inspect, list, and spawn pi agents in other mux panes",
+      "message, broadcast, inspect, list, and spawn pi agents in other mux panes",
     promptGuidelines: [
-      "Use mux to message and inspect other agent panes in this mux session and to spawn new ones (mux list / send / read / spawn / stop).",
+      "Use mux to message and inspect other agent panes in this mux session, to broadcast a message to all of them at once, and to spawn new ones (mux list / send / broadcast / read / spawn / stop).",
       "Reports and coordination expectations come from the tasking prompt, not from mux: deliver them with mux send when your task says to report back.",
       "Keep mux send payloads brief — there is no size limit and no truncation in the protocol, so a message is injected verbatim into the peer's context; bulk data travels by file path, never inside a message.",
       "For raw zellij control (layouts, floating panes, arbitrary commands, --block-until-*), use bash plus the zellij skill instead of mux.",
@@ -764,21 +926,25 @@ export function registerMuxTool(pi: ExtensionAPI, deps: MuxToolDeps): void {
             : params.text === undefined || params.text === ""
               ? 'action "send" requires "text"'
               : null
-          : params.action === "read"
-            ? !params.pane
-              ? 'action "read" requires "pane"'
+          : params.action === "broadcast"
+            ? params.text === undefined || params.text === ""
+              ? 'action "broadcast" requires "text"'
               : null
-            : params.action === "stop"
+            : params.action === "read"
               ? !params.pane
-                ? 'action "stop" requires "pane"'
+                ? 'action "read" requires "pane"'
                 : null
-              : params.action === "spawn"
-                ? params.task === undefined && !params.task_file
-                  ? 'action "spawn" requires "task" or "task_file"'
-                  : params.task !== undefined && params.task_file
-                    ? '"task" and "task_file" are mutually exclusive'
-                    : null
-                : null;
+              : params.action === "stop"
+                ? !params.pane
+                  ? 'action "stop" requires "pane"'
+                  : null
+                : params.action === "spawn"
+                  ? params.task === undefined && !params.task_file
+                    ? 'action "spawn" requires "task" or "task_file"'
+                    : params.task !== undefined && params.task_file
+                      ? '"task" and "task_file" are mutually exclusive'
+                      : null
+                  : null;
       if (invalid) {
         return result(invalid, { action: params.action }, true);
       }
@@ -789,6 +955,8 @@ export function registerMuxTool(pi: ExtensionAPI, deps: MuxToolDeps): void {
             return await doList();
           case "send":
             return await doSend(params.pane!, params.text!);
+          case "broadcast":
+            return await doBroadcast(params.text!);
           case "read":
             return await doRead(params.pane!, params, signal, onUpdate);
           case "spawn":
@@ -805,4 +973,39 @@ export function registerMuxTool(pi: ExtensionAPI, deps: MuxToolDeps): void {
       }
     },
   });
+
+  // ── /broadcast slash command ──────────────────────────────────────
+
+  // The human-invoked twin of the broadcast action: the same runBroadcast
+  // core with the flags the action never sets — includeSelf, so this
+  // pane's agent receives the message too, and human, so every recipient
+  // (this pane included) gets it verbatim, as a regular user message — no
+  // `[mux] from pane …` agent-to-agent prefix. The report goes to the user
+  // as a UI notification, not into the conversation. Registered only
+  // inside zellij, where there is a pane to deliver from — outside it the
+  // tool hides itself (prepareLoadout) and the command is simply absent.
+  if (deps.ownPaneId && deps.sessionName) {
+    pi.registerCommand("broadcast", {
+      description:
+        "Broadcast a message to every live mux agent in this zellij session — this pane included (the mux broadcast tool action excludes it)",
+      handler: async (args: string, ctx) => {
+        const text = args.trim();
+        if (!text) {
+          ctx.ui.notify("Usage: /broadcast <message>", "error");
+          return;
+        }
+        const outcome = await runBroadcast(text, {
+          includeSelf: true,
+          human: true,
+        });
+        ctx.ui.notify(
+          outcome.report,
+          outcome.targetCount > 0 &&
+            outcome.failed.length === outcome.targetCount
+            ? "error"
+            : "info",
+        );
+      },
+    });
+  }
 }

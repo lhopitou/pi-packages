@@ -181,13 +181,13 @@ requires "text"`) so the model self-corrects in one turn.
 
 ```typescript
 Type.Object({
-  action: StringEnum(["list", "send", "read", "spawn", "stop"]),
+  action: StringEnum(["list", "send", "broadcast", "read", "spawn", "stop"]),
 
   // shared
   pane: Type.Optional(Type.String()), // target pane id, "17" ≡ "terminal_17"
 
-  // send
-  text: Type.Optional(Type.String()), // message body
+  // send/broadcast
+  text: Type.Optional(Type.String()), // message body, delivered verbatim
 
   // read
   view: Type.Optional(StringEnum(["state", "screen"])), // default "state"
@@ -211,6 +211,7 @@ Type.Object({
 |---|---|
 | `list` | Live mux agents of the current zellij session (session names, pids), own pane marked. Bare panes are correlated against descriptors only to drive pruning — they are not mux-addressable, so they are not listed (a hidden-count note is the only trace). Computed on demand — nothing is cached; stale descriptors are verified and pruned during the scan. |
 | `send` | `pane` + `text` → connect to the target's socket, deliver, disconnect. Recipient injects `[mux] from pane <id> (<sessionName>): <text>` as a user message (idle → turn, busy → `steer` — the message enters after the current assistant turn, not queued behind the whole run). No live listener → instructive delivery error — target dead (descriptor pruned), not an agent pane, or mid-`/reload`; see [Descriptor lifecycle and pruning](#descriptor-lifecycle-and-pruning). |
+| `broadcast` | `text` → the same message to every live mux agent of the session: the `list` scan's agent set (verification + pruning included), the own pane excluded — self-delivery would inject into the sender's own run. Delivery is the send wire path per pane, reached fresh per target so a mid-scan reload is picked up, not failed. Per-pane outcomes; a failing pane is reported, not fatal — partial delivery is a normal result, total failure an error. |
 | `read` | Inspect a pane on demand. Views below. The only blocking action (only with `wait_for`). |
 | `spawn` | Create an agent pane/tab with env forwarding + task delivery (details below), register nothing, return `{paneId}`. Fire-and-forget — the new agent is an ordinary peer; whether and how it reports back is up to the prompt that tasked it. |
 | `stop` | Abort the target pane (Ctrl-c if streaming) and close it. |
@@ -219,6 +220,24 @@ There is deliberately **no `wait` action and no report hook**. An agent that
 wants to block can use `read` with `wait_for: "^idle$"` on `view: "state"`.
 Reporting conventions ("message pane 5 when done") belong to the instructing
 prompt — the coordinator and worktree skills will carry them after migration.
+
+### The `/broadcast` slash command
+
+The `broadcast` action has a human-invoked twin registered by the same
+`registerMux` (tool.ts): `/broadcast <message>`. Same `runBroadcast` core —
+the `list` scan and pruning, a fresh reach per target, per-pane outcomes —
+with the flags the action never sets:
+
+| | Invoked by | Own pane | Message |
+|---|---|---|---|
+| `mux broadcast` (tool action) | the agent, steered by its prompt | excluded — self-delivery would inject into the sender's own run | agent-to-agent: `[mux] from pane <id> (<session>): …` — provenance a peer needs |
+| `/broadcast <message>` (slash command) | the human, typing it | included — the user wants every agent to get it, this pane's too | `human: true` on the wire request → injected verbatim: a regular user message, indistinguishable from typing, in this pane too |
+
+Self-delivery rides the same socket path as any peer (idle → turn, busy →
+steer), so the current session receives the message and starts processing
+it like any user input. The fan-out report goes to the human as a UI
+notification, not into the conversation. Outside zellij the command is not
+registered at all (the tool hides itself there too).
 
 ### `read` views
 
@@ -274,9 +293,13 @@ At `session_start`, the `context` event injects a short block:
   reply):
 
 ```jsonc
-// sender → recipient
+// sender → recipient (agent-to-agent: provenance-prefixed on injection)
 {"type": "message", "token": "…", "fromPane": "terminal_5",
  "fromSessionName": "coordinator", "text": "done, PR opened"}
+
+// sender → recipient (the /broadcast command: human, injected verbatim)
+{"type": "message", "token": "…", "fromPane": "terminal_5",
+ "fromSessionName": "coordinator", "human": true, "text": "standup time"}
 
 // sender → recipient (read view:state; replyTo correlates)
 {"type": "state", "token": "…", "replyTo": "req-7"}
@@ -288,8 +311,10 @@ At `session_start`, the `context` event injects a short block:
  "sessionFile": "…", "sessionName": "api-refactor"}
 ```
 
-- **Injection:** the recipient calls `pi.sendUserMessage()` with the formatted
-  line. Idle → triggers a turn; busy → `deliverAs: "steer"` — the message
+- **Injection:** the recipient calls `pi.sendUserMessage()`. Agent-to-agent
+  messages are injected as `[mux] from pane <id> (<session>): …`;
+  `human` messages (the `/broadcast` command) verbatim, indistinguishable
+  from a regular user message. Idle → triggers a turn; busy → `deliverAs: "steer"` — the message
   steers the current run (enters after the current assistant turn), it does
   not queue behind the whole run. Messages integrate with the recipient's
   agent loop natively.
@@ -433,8 +458,14 @@ Not in v1. When mux is proven:
 7. Kill -9 a peer → hot-path `send` returns a delivery error and unlinks
    descriptor + socket; close a pane without killing → `list` prunes it via
    the pane-absence signal; verify the files are gone in both cases.
-8. Outside zellij → `mux` absent from the model's tool list.
-9. Then wire `-extensions/mux/index.ts` into the `pi-packages` entry in
+8. Outside zellij → `mux` absent from the model's tool list, and `/broadcast`
+   absent from the command list.
+9. `broadcast` end-to-end: the tool action excludes the own pane and
+   delivers `[mux]`-prefixed messages; `/reload`, then `/broadcast <text>`
+   (human-typed) includes it — every recipient gets the message verbatim,
+   no `[mux]` prefix, and the current session starts a turn on it; a pane
+   dying mid-scan shows as NOT delivered, not fatal.
+10. Then wire `-extensions/mux/index.ts` into the `pi-packages` entry in
    `settings.json` and validate with `/reload`.
 
 ## Open question

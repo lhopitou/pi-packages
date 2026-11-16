@@ -6,6 +6,11 @@
  * - **Addressing** — `mux send` delivers a message over a per-peer unix
  *   socket; it arrives in the recipient's conversation as a user message
  *   (turn if idle, steered mid-run if busy).
+ * - **Broadcasting** — the `mux broadcast` tool action and the
+ *   human-typed `/broadcast` slash command fan one message out to every
+ *   live peer; the action excludes the sender's own pane, the command
+ *   includes it. Agent broadcasts carry a `[mux] from pane …` prefix;
+ *   human broadcasts arrive verbatim, like a regular user message.
  * - **Inspection** — `mux read` returns a peer's live state (exact,
  *   mid-stream, from the events this extension already receives) or its
  *   raw screen — on demand, never pushed.
@@ -18,8 +23,9 @@
  * Raw multiplexer control stays in bash (zellij skill).
  *
  * Layout: `index.ts` (this file — lifecycle wiring), `tool.ts` (the mux
- * tool), `socket.ts` (wire protocol, descriptors, listener), `zellij.ts`
- * (raw CLI wrappers — the only multiplexer-specific module).
+ * tool + the `/broadcast` slash command), `socket.ts` (wire protocol,
+ * descriptors, listener), `zellij.ts` (raw CLI wrappers — the only
+ * multiplexer-specific module).
  *
  * Outside zellij the tool is hidden (`prepareLoadout` +
  * `hiddenDeclarations`, which also drops its guidelines) and nothing
@@ -31,7 +37,7 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import * as mux from "./socket.ts";
-import { registerMuxTool, type MuxToolDeps } from "./tool.ts";
+import { registerMux, type MuxToolDeps } from "./tool.ts";
 import * as zellij from "./zellij.ts";
 
 /** Our own pane identity, from what zellij injects into every pane. */
@@ -235,5 +241,5 @@ export default function muxExtension(pi: ExtensionAPI): void {
     sessionName: ZELLIJ_SESSION_NAME,
     envForward,
   };
-  registerMuxTool(pi, deps);
+  registerMux(pi, deps);
 }

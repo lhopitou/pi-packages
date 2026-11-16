@@ -7,8 +7,10 @@
  * 2. Publishes a descriptor at `$TMPDIR/pi-mux/<zellij-session>/<pane>.json`
  *    (mode 0600): `{ socketPath, token, pid, sessionName, startedAt }`.
  * 3. Serves two request types (connect–send–close, one NDJSON line per
- *    request, one reply line): `message` (inject as user message) and
- *    `state` (live activity snapshot).
+ *    request, one reply line): `message` (inject as user message —
+ *    agent-to-agent with a `[mux] from pane …` provenance prefix,
+ *    `human` messages verbatim, as if typed) and `state` (live
+ *    activity snapshot).
  *
  * Discovery is a pure function of the pane id: senders re-read the target
  * descriptor for every request (fresh token), so a /reload costs at worst a
@@ -167,6 +169,12 @@ export interface MessageRequest {
   fromPane: string;
   fromSessionName: string;
   text: string;
+  /**
+   * Human-typed message (the `/broadcast` slash command): injected
+   * verbatim, as a regular user message — no `[mux] from pane …`
+   * prefix. Absent → agent-to-agent → prefixed with the origin pane.
+   */
+  human?: boolean;
 }
 
 export interface StateRequest {
@@ -435,7 +443,11 @@ export class MuxServer {
     if (request.type === "state") {
       return this.opts.state.snapshot();
     }
-    const text = `[mux] from pane ${request.fromPane} (${request.fromSessionName}): ${request.text}`;
+    // Human messages (the /broadcast command) arrive verbatim, like a
+    // regular user message; agent-to-agent messages carry provenance.
+    const text = request.human
+      ? request.text
+      : `[mux] from pane ${request.fromPane} (${request.fromSessionName}): ${request.text}`;
     try {
       return { type: "ok", delivery: this.opts.onMessage(text) };
     } catch (err) {
