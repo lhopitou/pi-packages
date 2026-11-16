@@ -15,6 +15,7 @@ Personal pi extensions, agents, and tools.
 | `permissions` | Permission gates for tool calls (bash, write, etc.) |
 | `pi-worktree` | Status tracking for parallel git-worktree pi agents: reporter mode inside worktree agents (status file + `●`/`✓` pane rename), `worktree_status`/`worktree_wait` tools in the main session |
 | `working-tree-drift` | Working-tree drift notifier — detects edits/reverts/commits made outside the agent's tool calls at each prompt boundary and injects a compact notice (git status+HEAD snapshot; mtime+size walk fallback for non-git dirs; `/drift` manual check) |
+| `profiles` | Named system-prompt profiles — markdown files in `~/.pi/agent/profiles` + `.pi/profiles`, activated via `pi --profile <name>` or `/profile`; appended to every run's system prompt; switches and clears persist immediately (sticky across resume) |
 
 ## Agents
 
