@@ -8,7 +8,9 @@
   ],
   "private": true,
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"**/*.ts\"",
+    "format:check": "prettier --check \"**/*.ts\""
   },
   "dependencies": {
     "@earendil-works/gondolin": "0.12.0",
@@ -23,6 +25,7 @@
   },
   "devDependencies": {
     "@types/turndown": "^5.0.0",
+    "prettier": "^3.9.10",
     "typescript": "^5.7.0"
   },
   "peerDependencies": {
@@ -40,6 +43,8 @@
     "skills": [
       "./skills"
     ],
-    "prompts": ["./prompts/"]
+    "prompts": [
+      "./prompts/"
+    ]
   }
 }
