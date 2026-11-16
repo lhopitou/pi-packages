@@ -164,6 +164,12 @@ const parameters = Type.Object({
       description: "spawn: steal focus to the new pane. Default false.",
     }),
   ),
+  pi_args: Type.Optional(
+    Type.Array(Type.String(), {
+      description:
+        'spawn: extra pi CLI flags passed through verbatim before the task file, e.g. ["--profile", "reviewer"]. No validation — must be valid pi flags the child knows.',
+    }),
+  ),
 });
 
 // ── small helpers ───────────────────────────────────────────────────────
@@ -727,6 +733,7 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
       task_file?: string;
       cwd?: string;
       model?: string;
+      pi_args?: string[];
       placement?: "right" | "down" | "tab";
       focus?: boolean;
     },
@@ -780,6 +787,7 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
       sessionId,
     ];
     if (params.model) argv.push("--model", params.model);
+    if (params.pi_args?.length) argv.push(...params.pi_args);
     argv.push(`@${taskFile}`);
 
     const spawnArgs = { name: handle, cwd: childCwd, focus, argv };
@@ -812,6 +820,9 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
         `  pi session-id: ${sessionId}\n` +
         `  cwd: ${childCwd}\n` +
         `  model: ${params.model ?? "(the child's own default settings)"}\n` +
+        (params.pi_args?.length
+          ? `  pi flags: ${params.pi_args.join(" ")}\n`
+          : "") +
         `  task: @${taskFile}\n` +
         `Fire-and-forget — the new agent is an ordinary peer: address it with mux send pane=${paneId}, inspect it with mux read pane=${paneId}.`,
       { action: "spawn", handle, paneId, sessionId },
@@ -871,7 +882,7 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
       "send pane text: deliver a message that arrives as a user message in the target pane — turn if idle, steered mid-run if busy. " +
       "broadcast text: deliver one message to every live mux agent at once (the list action's agent set; your own pane excluded) — per-pane outcomes reported. " +
       "read pane: inspect a peer on demand — view=state (live tool call, streaming tail, last messages), view=screen (raw dump; also works on non-agent panes); with wait_for, block until a regex matches. " +
-      "spawn: create a new agent pane/tab with env forwarding and a task file (fire-and-forget). " +
+      "spawn: create a new agent pane/tab with env forwarding, a task file, and optional extra pi CLI flags (pi_args; fire-and-forget). " +
       "stop: abort (Ctrl-c if mid-run) and close a pane. " +
       'Panes are addressed by bare pane number ("17" ≡ "terminal_17"); titles never address anything.',
     promptSnippet:
