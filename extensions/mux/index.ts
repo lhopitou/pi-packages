@@ -156,10 +156,11 @@ export default function muxExtension(pi: ExtensionAPI): void {
     }
   }
 
-  pi.on("session_start", async (_event, ctx) => {
+  pi.on("session_start", async (event, ctx) => {
     currentCtx = ctx;
     state.sessionFile = ctx.sessionManager.getSessionFile() ?? null;
     state.onAgentSettled(); // Reset transient state for the new runtime.
+    adoptParentSession(event, ctx);
     await startListener();
   });
 
@@ -167,6 +168,31 @@ export default function muxExtension(pi: ExtensionAPI): void {
     stopListener();
     currentCtx = null;
   });
+
+  /**
+   * A pane spawned by mux spawn (PI_MUX_PARENT_SESSION_FILE is forwarded)
+   * links the spawner's session file as its parent, so the session picker
+   * nests spawned sessions under their spawner instead of listing every
+   * one at the root.
+   *
+   * Only on a fresh startup, and only while the header carries no parent:
+   * a session file is created (header first) only once the first user or
+   * assistant message is persisted, so mutating the in-memory header before
+   * that flush persists the link — no file rewrite needed. Every other
+   * reason is too late or wrong: reload/resume of an already-flushed session
+   * cannot be rewritten from here, and /new or /fork in a spawned pane is a
+   * new conversation with its own lineage. The guard also keeps /reload
+   * from re-adopting on every restart of the same runtime.
+   */
+  function adoptParentSession(
+    event: { reason: "startup" | "reload" | "new" | "resume" | "fork" },
+    ctx: ExtensionContext,
+  ): void {
+    const parentFile = process.env.PI_MUX_PARENT_SESSION_FILE;
+    if (!parentFile || event.reason !== "startup") return;
+    const header = ctx.sessionManager.getHeader();
+    if (header && !header.parentSession) header.parentSession = parentFile;
+  }
 
   // ── peer state wiring ────────────────────────────────────────────────
   // `state` replies are served from events the extension already receives:

@@ -738,6 +738,7 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
       focus?: boolean;
     },
     cwd: string,
+    parentSessionFile: string | undefined,
   ): Promise<MuxResult> {
     const sessionName = deps.sessionName!;
     const handle =
@@ -775,6 +776,11 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
       PI_MUX_PARENT_ZELLIJ_SESSION: sessionName,
       PI_MUX_PARENT_CWD: cwd,
       PI_MUX_PARENT_PID: String(process.pid),
+      // The child links this session file as its parent (see index.ts), so
+      // the session picker nests it here instead of listing it at the root.
+      // Always set (empty overrides a forwarded grandparent value when this
+      // spawner itself runs sessionless); the child skips empty values.
+      PI_MUX_PARENT_SESSION_FILE: parentSessionFile ?? "",
     };
     const argv = [
       "env",
@@ -971,7 +977,11 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
           case "read":
             return await doRead(params.pane!, params, signal, onUpdate);
           case "spawn":
-            return await doSpawn(params, ctx.cwd);
+            return await doSpawn(
+              params,
+              ctx.cwd,
+              ctx.sessionManager.getSessionFile(),
+            );
           case "stop":
             return await doStop(params.pane!);
         }

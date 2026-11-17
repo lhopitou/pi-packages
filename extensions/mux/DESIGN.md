@@ -375,8 +375,17 @@ At `session_start`, the `context` event injects a short block:
 
 ```
 PI_MUX_PARENT_PANE, PI_MUX_PARENT_ZELLIJ_SESSION,
-PI_MUX_PARENT_CWD, PI_MUX_PARENT_PID
+PI_MUX_PARENT_CWD, PI_MUX_PARENT_PID,
+PI_MUX_PARENT_SESSION_FILE
 ```
+
+`PI_MUX_PARENT_SESSION_FILE` is the spawner's own session file (empty when
+it runs sessionless): at `session_start` the child writes it into its
+session header's `parentSession`, so the session picker nests spawned
+sessions under their spawner instead of listing each at the root. The
+header is only flushed once the first user or assistant message is
+persisted, so an in-memory mutation at startup persists the link without
+rewriting any file.
 
 ## Zellij behaviors relied on (verified on 0.46.0)
 
