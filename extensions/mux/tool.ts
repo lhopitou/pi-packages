@@ -18,7 +18,6 @@ import { randomBytes } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { StringEnum } from "@earendil-works/pi-ai";
 import {
   truncateTail,
   type AgentToolResult,
@@ -28,6 +27,24 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import * as mux from "./socket.ts";
 import * as zellij from "./zellij.ts";
+
+/**
+ * `{ type: "string", enum: [...] }` — the Google-compatible enum schema
+ * (anyOf/const are not supported there), same runtime schema as pi-ai's
+ * StringEnum. Built with Type.Unsafe because pi-ai's returns a pi-schema
+ * `Schema<T>`, which TypeBox's `Static` cannot infer — fields built with it
+ * degrade to `unknown` in `parameters`, breaking exhaustive `switch` and
+ * every string-typed use of `action`/`view`/`placement`.
+ */
+const StringEnum = <T extends readonly string[]>(
+  values: T,
+  options?: { description?: string; default?: T[number] },
+) =>
+  Type.Unsafe<T[number]>({
+    type: "string",
+    enum: [...values],
+    ...options,
+  });
 
 const TOOL_NAME = "mux";
 const DEFAULT_WAIT_TIMEOUT_S = 10;

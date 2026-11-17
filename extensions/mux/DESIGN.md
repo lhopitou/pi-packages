@@ -206,6 +206,12 @@ Type.Object({
 })
 ```
 
+`StringEnum` here is a local helper, not pi-ai's: pi-ai's returns a pi-schema
+`Schema<T>`, which TypeBox's `Static` cannot infer, so enum fields degrade to
+`unknown` in `parameters`. The local one wraps the same
+`{ type: "string", enum: [...] }` runtime schema in `Type.Unsafe` to keep the
+literal-union static type (tool.ts).
+
 ### Actions
 
 | Action | Semantics |
