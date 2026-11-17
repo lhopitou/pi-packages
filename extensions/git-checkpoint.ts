@@ -216,6 +216,11 @@ export default function (pi: ExtensionAPI) {
     return undefined;
   };
 
+  // ReadonlySessionManager no longer exposes getChildren(); derive children
+  // from the entry list instead (same as upstream's getChildren impl).
+  const childrenOf = (ctx: ExtensionContext, parentId: string) =>
+    ctx.sessionManager.getEntries().filter((e) => e.parentId === parentId);
+
   /**
    * Find the deepest leaf on a child branch.
    *
@@ -229,26 +234,26 @@ export default function (pi: ExtensionAPI) {
     ctx: ExtensionContext,
     parentId: string,
   ): string | undefined => {
-    const children = ctx.sessionManager.getChildren(parentId);
-    if (!children || children.length === 0) return undefined;
+    const children = childrenOf(ctx, parentId);
+    if (children.length === 0) return undefined;
 
     // Prefer non-summary children (the actual conversation branch)
     const entryChild =
-      children.find((c: any) => c.type !== "branch_summary") ?? children[0];
+      children.find((c) => c.type !== "branch_summary") ?? children[0];
 
     // Walk down to the leaf
     let current = entryChild;
     for (;;) {
-      const nextChildren = ctx.sessionManager.getChildren((current as any).id);
-      if (!nextChildren || nextChildren.length === 0) break;
+      const nextChildren = childrenOf(ctx, current.id);
+      if (nextChildren.length === 0) break;
 
       const nextChild =
-        nextChildren.find((c: any) => c.type !== "branch_summary") ??
+        nextChildren.find((c) => c.type !== "branch_summary") ??
         nextChildren[0];
       current = nextChild;
     }
 
-    return (current as any).id;
+    return current.id;
   };
 
   /**
@@ -580,7 +585,11 @@ export default function (pi: ExtensionAPI) {
     const targetEntryId = event.newLeafId;
     if (!targetEntryId) return;
 
-    const result = findCheckpointForLeaf(ctx, targetEntryId, event.oldLeafId);
+    const result = findCheckpointForLeaf(
+      ctx,
+      targetEntryId,
+      event.oldLeafId ?? undefined,
+    );
     if (!result) return;
 
     const { stashRef, direction } = result;
