@@ -20,8 +20,8 @@
  * flag activation, switch, and clear — and restored on /resume, /fork,
  * --continue, and /reload; an explicit --profile flag wins.
  *
- * Spawned subagents receive profiles through the mux spawn `pi_args`
- * passthrough: pi_args=["--profile", "reviewer"].
+ * Spawned subagents receive profiles through the mux spawn `profile`
+ * parameter: profile="reviewer".
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";

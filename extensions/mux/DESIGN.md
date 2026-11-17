@@ -202,7 +202,7 @@ Type.Object({
   model: Type.Optional(Type.String()),        // child model, "provider/modelId" (default: child's own settings)
   placement: Type.Optional(StringEnum(["right", "down", "tab"])), // default "right"
   focus: Type.Optional(Type.Boolean()),       // default false — never steal the user's focus
-  pi_args: Type.Optional(Type.Array(Type.String())), // extra pi CLI flags, passed through verbatim (e.g. ["--profile", "reviewer"])
+  profile: Type.Optional(Type.String()), // named system-prompt profile for the child (--profile <name>)
 })
 ```
 
@@ -220,7 +220,7 @@ literal-union static type (tool.ts).
 | `send` | `pane` + `text` → connect to the target's socket, deliver, disconnect. Recipient injects `[mux] from pane <id> (<sessionName>): <text>` as a user message (idle → turn, busy → `steer` — the message enters after the current assistant turn, not queued behind the whole run). No live listener → instructive delivery error — target dead (descriptor pruned), not an agent pane, or mid-`/reload`; see [Descriptor lifecycle and pruning](#descriptor-lifecycle-and-pruning). |
 | `broadcast` | `text` → the same message to every live mux agent of the session: the `list` scan's agent set (verification + pruning included), the own pane excluded — self-delivery would inject into the sender's own run. Delivery is the send wire path per pane, reached fresh per target so a mid-scan reload is picked up, not failed. Per-pane outcomes; a failing pane is reported, not fatal — partial delivery is a normal result, total failure an error. |
 | `read` | Inspect a pane on demand. Views below. The only blocking action (only with `wait_for`). |
-| `spawn` | Create an agent pane/tab with env forwarding + task delivery + optional extra pi CLI flags (`pi_args`, details below), register nothing, return `{paneId}`. Fire-and-forget — the new agent is an ordinary peer; whether and how it reports back is up to the prompt that tasked it. |
+| `spawn` | Create an agent pane/tab with env forwarding + task delivery + optional named profile (`profile`, details below), register nothing, return `{paneId}`. Fire-and-forget — the new agent is an ordinary peer; whether and how it reports back is up to the prompt that tasked it. |
 | `stop` | Abort the target pane (Ctrl-c if streaming) and close it. |
 
 There is deliberately **no `wait` action and no report hook**. An agent that
@@ -365,7 +365,7 @@ At `session_start`, the `context` event injects a short block:
   the pane exists; if it vanished, the result is an instructive error
   ("no attached client — attach once or use a pane instead").
 - **Child argv:**
-  `pi -a -n <handle> --session-id <handle>-<rand> [--model <model>] "@<taskfile>"`.
+  `pi -a -n <handle> --session-id <handle>-<rand> [--model <model>] [--profile <name>] "@<taskfile>"`.
   `-a` avoids the interactive trust prompt blocking a headless child;
   `--model` selects the child's model in `"provider/modelId"` form — omitted,
   the child falls back to its own `defaultProvider`/`defaultModel` settings
@@ -374,11 +374,16 @@ At `session_start`, the `context` event injects a short block:
   can `/resume` it later; transcript addressing goes through the live
   peer's `state` reply, not the id); the task is passed as an `@file` message
   so the child starts working immediately with no quoting hazards.
-- **Extra flags (`pi_args`):** passed through verbatim, inserted between
-  `--session-id`/`--model` and the `@<taskfile>` argument — the passthrough
-  for extension-registered flags such as `--profile <name>` (profiles.ts), so
-  spawned subagents start with a chosen system-prompt profile. No validation
-  here; the child errors on flags it does not know.
+- **Profile (`profile`):** passed as `--profile <name>` (profiles.ts), so
+  spawned subagents start with a chosen system-prompt profile. There is
+  deliberately **no raw flag passthrough**: the `@<taskfile>` argument sits
+  immediately after the caller-provided flags, so a value-taking flag passed
+  without its value would silently swallow the task file as the flag's value
+  — e.g. `--model` alone made the child die on `Model "@/tmp/..." not found`
+  and `--name` alone would have consumed the task file as the session name
+  with the child starting idle, no task, no error. A constrained parameter
+  cannot dangle; the child just notifies and starts unprofiled on an unknown
+  name.
 - **Task delivery:** inline `task` text is written to
   `$TMPDIR/pi-mux-task-<handle>.md`; `task_file` passes an existing file.
 - **Env forwarding:** panes are spawned with the zellij server's environment,
