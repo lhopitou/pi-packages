@@ -265,6 +265,13 @@ declarations also drop the tool's `promptGuidelines`, so outside zellij the
 model sees nothing. Inside zellij, the guidelines say:
 
 - Use `mux` to message and inspect other agent panes and to spawn new ones.
+- For context-demanding tasks — exploring an unfamiliar codebase, reading or
+  scanning many files, broad searches — prefer spawning a subagent (`mux
+  spawn`, task as prompt file) and reviewing its output with `mux read`,
+  keeping your own context lean. Do not delegate small tasks (a few files, a
+  quick lookup) or work that needs your conversation context: the spawned
+  agent sees none of it, so give it a self-contained task with objective,
+  constraints, and expected output.
 - Reports and coordination expectations come from the tasking prompt; deliver
   them with `mux send`.
 - Keep `send` payloads brief — there is no size limit and no truncation in

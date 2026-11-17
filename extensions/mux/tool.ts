@@ -895,6 +895,7 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
       "message, broadcast, inspect, list, and spawn pi agents in other mux panes",
     promptGuidelines: [
       "Use mux to message and inspect other agent panes in this mux session, to broadcast a message to all of them at once, and to spawn new ones (mux list / send / broadcast / read / spawn / stop).",
+      "For context-demanding tasks — exploring an unfamiliar codebase, reading or scanning many files, broad searches — prefer spawning a subagent (mux spawn, task as prompt file) and reviewing its output with mux read, keeping your own context lean. Do not delegate small tasks (a few files, a quick lookup) or work that needs your conversation context: the spawned agent sees none of it, so give it a self-contained task with objective, constraints, and expected output.",
       "Reports and coordination expectations come from the tasking prompt, not from mux: deliver them with mux send when your task says to report back.",
       "Keep mux send payloads brief — there is no size limit and no truncation in the protocol, so a message is injected verbatim into the peer's context; bulk data travels by file path, never inside a message.",
       "For raw zellij control (layouts, floating panes, arbitrary commands, --block-until-*), use bash plus the zellij skill instead of mux.",
