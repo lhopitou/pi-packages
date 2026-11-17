@@ -24,6 +24,7 @@
     "xxhash-wasm": "^1.1.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.6",
     "@types/turndown": "^5.0.0",
     "prettier": "^3.9.10",
     "typescript": "^5.7.0"

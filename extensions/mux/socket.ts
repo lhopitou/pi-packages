@@ -323,7 +323,6 @@ export interface MuxServerOptions {
  */
 export class MuxServer {
   private token = "";
-  private listening = false;
   private stopServer: () => void = () => {};
   private readonly opts: MuxServerOptions;
 
@@ -377,12 +376,10 @@ export class MuxServer {
         }
       };
     });
-    this.listening = true;
   }
 
   /** Close the listener and unlink descriptor + socket (best effort). */
   stop(): void {
-    this.listening = false;
     this.stopServer();
     pruneFiles(this.opts.paths);
   }

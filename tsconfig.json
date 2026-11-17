@@ -4,7 +4,13 @@
     "lib": ["ES2023"],
     "module": "ES2022",
     "moduleResolution": "bundler",
+    "types": ["node"],
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
@@ -13,5 +19,5 @@
     "noEmit": true
   },
   "include": ["extensions/**/*.ts"],
-  "exclude": ["node_modules", "extensions/pi-web-access/node_modules", "extensions/pi-om/node_modules"]
+  "exclude": ["node_modules", "old"]
 }

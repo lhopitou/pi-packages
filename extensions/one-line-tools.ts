@@ -74,7 +74,6 @@
 
 import type {
   ExtensionAPI,
-  ExtensionUIContext,
   Theme,
   ToolRenderers,
 } from "@earendil-works/pi-coding-agent";
@@ -119,11 +118,8 @@ const DEFAULT_MODE: Mode = "collapsed";
 /** The one mode every block renders. */
 let globalMode: Mode = DEFAULT_MODE;
 
-/** Footer status key under which the current mode is displayed. */
-const STATUS_KEY = "olt.mode";
-
-/** Advance the mode one step and show it in the footer status. */
-function advanceMode(ui: ExtensionUIContext | undefined): void {
+/** Advance the mode one step. */
+function advanceMode(): void {
   globalMode = CYCLE[globalMode];
   debug(`keypress -> mode ${globalMode}`);
 }
@@ -403,7 +399,7 @@ export default function toolOutputModesExtension(pi: ExtensionAPI) {
     offInput?.();
     offInput = ui.onTerminalInput((data) => {
       if (!getKeybindings().matches(data, "app.tools.expand")) return undefined;
-      advanceMode(ui);
+      advanceMode();
       setTimeout(() => {
         const now = ui.getToolsExpanded();
         if (now === coreExpanded) {
