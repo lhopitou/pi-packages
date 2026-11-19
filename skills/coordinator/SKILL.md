@@ -1,200 +1,96 @@
 ---
 name: coordinator
-description: Orchestrate multiple worktree agents end to end — spawn, monitor, communicate, review, and merge. Use for multi-task plans where agents must be managed through completion.
+description: Drive subagent panes with the mux tool — spawn agents into panes or tabs, have them report in, steer them mid-run, inspect their state, and stop them when done. Use when delegating tasks to subagents, fanning out parallel work, or coordinating several agents in the multiplexer session.
 ---
 
-# Worktree Agent Coordinator
+# Agent pane coordination
 
-You are a coordinator agent. You orchestrate multiple worktree agents. You do
-NOT implement tasks yourself. You spawn agents, monitor them, send
-instructions, review their output, and trigger merges.
+You coordinate subagents as mux pane peers: pi sessions in panes or tabs of
+this multiplexer session, addressed by pane number.
 
-## Core Concepts
+## Guard
 
-- **Worktree agent**: a pi session running in its own git worktree/branch,
-  in a `wt-<handle>` tab of this multiplexer session
-- **Handle**: the worktree directory name, used to address agents everywhere
-- **Effective statuses** (from the `worktree_status` tool):
-  - `working` — agent is running
-  - `done` — agent finished (tab shows `✓ wt-<handle>`)
-  - `crashed` — status says working but the process is dead (killed, tab closed)
-  - `interrupted` — the run was aborted; the agent is idle awaiting input
-- **Continuous monitoring invariant**: every spawned agent remains your
-  responsibility until you have reviewed and merged it, or explicitly removed
-  it. A user message or an aborted `worktree_wait` does not clear that
-  responsibility.
+The mux tool registers only when the agent runs inside a multiplexer
+session. If it is missing from your tools, the task cannot proceed: report
+to the user that coordinator work needs a multiplexer session, and stop
+there.
 
-## Command Reference
+## Pre-flight
 
-### Spawn Agents
+Run `mux list` before spawning. It confirms the session state and gives you
+your own pane number — agents report back to that number, and you embed it in
+every task prompt.
 
-Use the `/skill:worktree` dispatch procedure exactly: write ALL prompt files
-first, THEN spawn all agents. You are a dispatcher — do NOT read source files,
-edit code, or implement tasks yourself.
+## Spawning
 
-Prompt file rules:
+`mux spawn` is fire-and-forget: give it a `handle`, `cwd`, and a
+self-contained `task` (inline text or `@file` for bulk). Spawned agents see
+none of your conversation, so each prompt carries all the context the task
+needs; bulk content travels by file path, never inline.
 
-- Self-contained with full context (agents cannot see your conversation)
-- RELATIVE paths only (each worktree has its own root)
-- If a task references a markdown file (plan, spec), re-read it for the latest
-  version before writing the prompt
-- If delegating a skill, instruct the agent to use it; do not write manual
-  implementation steps
-- Do not delegate a skill to worktrees unless explicitly instructed
+**File ownership:** partition tasks so each agent edits its own files —
+concurrent writes to a shared file clobber each other. Check the task set
+for shared-file conflicts before spawning. When the work can't be split
+cleanly, isolate it: follow the dispatch procedure in
+`skills/worktree/SKILL.md` (worktree at the conventional path, base branch
+recorded, setup script run, agent spawned via mux with `cwd` inside it).
+The spawned agents are ordinary pane peers — steer, inspect, and stop them
+like any other. Their branches land only when you send them `/skill:merge`
+after reviewing their report — one at a time.
 
-### Check Status — `worktree_status` tool
+**Placement:**
+- `right` — short-lived agents, few of them (≤2): they sit beside you, in
+  view while they work, a glance away from inspection.
+- `tab` — long-lived agents or many of them: each gets its own tab, keeping
+  your tab uncluttered and your layout usable.
 
-```text
-worktree_status                      // all agents
-worktree_status { handles: ["a"] }   // specific agents
-```
+## Reporting vs inspecting
 
-If a just-spawned handle has no status file yet (agent still starting), wait a
-few seconds and check again.
+Two ways to learn what a subagent did. Choose by situation:
 
-### Wait for Agents — `worktree_wait` tool
+**Push — the agent reports in.** Embed in the task prompt: "When finished,
+`mux send pane <N>` a brief report, ending the last line with
+`DONE <handle>`." The report arrives as a user message (`[mux] from pane N`)
+that wakes you, so you act on completion the moment it happens — update your
+records, stop the pane, spawn the next queued task. Reach for push when:
+- agents are many — watching panes does not scale
+- runs are long — you are free to do other work; the report wakes you
+- completion must trigger follow-up (wave replacement, cleanup)
 
-```text
-worktree_wait {}                                          // all, until settled
-worktree_wait { handles: ["a", "b"] }                     // specific
-worktree_wait { handles: [...], any: true }               // first to settle
-worktree_wait { handles: [...], timeoutSeconds: 3600 }    // with timeout
-```
+**Pull — you inspect the pane.** `mux read` with `view: "state"` shows the
+live tool call and recent messages; `view: "screen"` dumps the raw terminal;
+`wait_for` blocks until the pane says something matching. Reach for pull
+when:
+- agents are few and short-lived beside you — checking is cheaper than
+  wiring the report protocol into the prompt
+- you want mid-run progress without disturbing the agent
+- an agent goes quiet, a report is late or missing, or a report smells wrong
+  — verify against the pane itself
+- the agent crashed or hung and you need to see terminal output
 
-"Settled" means done, crashed, or interrupted. On timeout the tool reports
-which agents are still working — decide whether to keep waiting, or capture
-and inspect their output.
+Push for completion, pull for verification: even with report-in agents, read
+the pane when a report is overdue or a claim needs checking.
 
-### Resume Waiting After Interruptions
+## Steering
 
-Treat waiting as an ongoing coordinator state, not a single command. Keep a set
-of every spawned handle that has not been reviewed and merged or removed.
-Whenever a user message interrupts a wait or adds more work:
+`mux send` delivered to a busy agent steers it mid-run — steer, don't
+restart: a correction in flight saves re-running the whole task.
+`broadcast` reaches every live agent at once — use it to fan a shared
+discovery (a blocker, a superseded decision) to all in-flight siblings so
+they converge instead of each rediscovering it. A finished-but-still-live
+agent that got something wrong is fixed in place the same way: send the
+correction, it re-runs, and reports `DONE` again.
 
-1. Handle the user's request, including spawning any additional agents.
-2. Add newly spawned handles to the tracked set.
-3. Run `worktree_status` for the entire tracked set.
-4. Process any agents that are done, crashed, or interrupted.
-5. Re-enter `worktree_wait` for every remaining working handle, using `any`
-   when multiple agents remain.
+Keep messages brief; bulk data travels by file path.
 
-Aborting a `worktree_wait` call (e.g. with Escape) cancels only that
-invocation. It does not end the monitoring loop. Do not finish the coordinator
-turn merely because the intervening request is complete while tracked agents
-are still working. Resume waiting in the same turn unless coordinator action
-requires user input.
+## Lifecycle
 
-### Capture Output
+`mux stop` closes a pane. Stop an agent after its `DONE` report — close one
+before spawning its replacement — and stop a misbehaving agent to abort it.
+At the end of a run, `mux list` is the audit: every agent you spawned is stopped.
+Panes you did not create are none of your concern.
 
-Use the `worktree_message` tool to review what an agent did — it reads the
-agent's final assistant message straight from its session file, so it works
-for working, done, crashed, and interrupted agents:
+## Recovery
 
-```text
-worktree_message { handle: "<handle>" }              // latest assistant message
-worktree_message { handle: "<handle>", count: 3 }     // last few, oldest first
-```
-
-The pane dump commands below are a debugging fallback only (e.g. the agent
-never produced a session, or you need to see terminal output like a crashed
-process). The pane target comes from `worktree_status` (the `mux:paneTarget`
-field, e.g. `zellij:terminal_12` or `tmux:%3`).
-
-**zellij:**
-
-```bash
-zellij action dump-screen --pane-id <paneTarget>            # viewport
-zellij action dump-screen --full --pane-id <paneTarget>     # + scrollback
-```
-
-**tmux:**
-
-```bash
-tmux capture-pane -p -t <paneTarget>            # viewport
-tmux capture-pane -p -S -300 -t <paneTarget>    # + scrollback
-```
-
-### Send Instructions
-
-**zellij:**
-
-```bash
-zellij action paste --pane-id <paneTarget> "<instruction>" && \
-zellij action send-keys --pane-id <paneTarget> 'Enter'
-```
-
-For long instructions, paste from a variable: `zellij action paste --pane-id <id> "$(cat followup.md)"`.
-
-**tmux:**
-
-```bash
-tmux load-buffer -b wtbuf followup.md && tmux paste-buffer -b wtbuf -t <paneTarget>
-tmux send-keys -t <paneTarget> Enter
-```
-
-Skills are invoked like user input: send `/skill:merge` to make an agent run
-the merge skill.
-
-### Merge & Cleanup
-
-Tell the agent to merge its own branch — the `/skill:merge` skill commits,
-rebases onto the base branch, merges, and cleans up the worktree and tab:
-
-```text
-// after sending "/skill:merge" to agent-a:
-worktree_wait { handles: ["agent-a"], timeoutSeconds: 300 }
-```
-
-The agent's status file is deleted a couple of seconds after its merge completes
-(post-mortem cleanup, together with the tab close). `worktree_status`
-reporting no file for a handle you sent `/skill:merge` to — or `worktree_wait`
-reporting it as `gone` — means the merge ran to completion. Verify with
-`git -C <main-root> log --oneline -3 <base>` if unsure.
-
-To discard an agent's work without merging:
-
-```bash
-ROOT=$(git rev-parse --show-toplevel)
-WTROOT="$ROOT/../$(basename "$ROOT")__worktrees"
-# close its tab (pane id from worktree_status):
-#   zellij action close-pane --pane-id <paneTarget>
-#   tmux kill-window -t <paneTarget>   # pane target resolves to its window
-git worktree remove --force "$WTROOT/<handle>"
-git branch -D <handle>
-rm -f "$WTROOT/.status/<handle>.json" "$WTROOT/.status/<handle>.prompt.md"
-```
-
-## Workflow: Fan-out / Fan-in
-
-1. Write ALL prompt files (see `/skill:worktree` procedure)
-2. Spawn all agents in the background
-3. Confirm they started: `worktree_status` — all handles show `working`
-4. `worktree_wait` with `any: true` until one settles
-5. Identify the finished agent via `worktree_status`; capture and review its
-   output
-6. Send it `/skill:merge`, then `worktree_wait` on that handle until its file
-   disappears (timeout ~5 min)
-7. Repeat with the remaining agents so completed work does not wait idle
-
-Merging one at a time avoids conflicts between sibling branches.
-
-## Rules
-
-1. **Write ALL prompt files before spawning any agents.** Prompts are
-   self-contained; agents cannot see your conversation.
-2. **Background dispatch** (`--no-focus` / `-d`) so you stay in your own tab.
-3. **Always confirm agents started** with `worktree_status` before waiting.
-4. **Keep waiting across interruptions.** Track every unprocessed agent until
-   it is merged or removed. After any intervening user request, check the full
-   tracked set and resume waiting in the same turn.
-5. **Wait with `any: true` when multiple agents run.** As soon as one settles,
-   identify it, review its output, and merge it before waiting on the rest.
-6. **Capture and review output before merging.** Never merge blindly.
-7. **Merge one at a time** by sending `/skill:merge` to each agent
-   sequentially. Wait for each merge to complete before the next.
-8. **Use timeouts** on every `worktree_wait`. Handle timed-out agents by
-   capturing their output and deciding explicitly: keep waiting, send a
-   follow-up, or remove them.
-9. **Prompt files use relative paths** (each worktree has its own root).
-10. **You are a coordinator, not an implementer.** Never edit source files
-    directly.
+A failed mux call (schema typo, pane already gone) is retryable. Re-check
+`mux list` for the current pane layout, adjust, and retry.

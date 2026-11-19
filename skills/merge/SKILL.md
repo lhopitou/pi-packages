@@ -1,13 +1,13 @@
 ---
 name: merge
-description: Commit, rebase onto the base branch, merge the current worktree branch back into it, and clean up the worktree and tab.
+description: Commit, rebase onto the base branch, merge the current worktree branch back into it, and clean up the worktree.
 disable-model-invocation: true
 ---
 
 # Merge
 
 Arguments appended below (as `User:` lines) may contain flags:
-- `--keep`, `-k` → keep the worktree, branch, and tab after merging (skip Step 4)
+- `--keep`, `-k` → keep the worktree and branch after merging (skip Step 4)
 
 Commit, rebase, and merge the current branch. This finishes work on a
 worktree branch: all changes are committed, the branch is rebased onto its
@@ -95,19 +95,8 @@ git -C "$MAIN_ROOT" worktree remove "$WT" 2>/dev/null || {
   git -C "$MAIN_ROOT" worktree prune
 }
 git -C "$MAIN_ROOT" branch -d "$BRANCH"
-
-# Post-mortem, detached in a new session so it survives this shell and runs
-# AFTER this pi has stopped (its reporter rewrites the status file on settle):
-# delete the status file, then close this tab (this pane's process dies with it —
-# expected).
-export WT_DELAY_RM="$WTROOT/.status/$HANDLE.json" \
-       WT_ZELLIJ_PANE="${ZELLIJ_PANE_ID:-}" \
-       WT_TMUX_PANE="${TMUX_PANE:-}"
-setsid sh -c 'sleep 2; rm -f "$WT_DELAY_RM"; \
-  [ -n "$WT_ZELLIJ_PANE" ] && zellij action close-pane --pane-id "$WT_ZELLIJ_PANE"; \
-  [ -n "$WT_TMUX_PANE" ] && tmux kill-window -t "$WT_TMUX_PANE"' </dev/null >/dev/null 2>&1 &
 ```
 
-Then tell the user: merged `$BRANCH` into `$BASE`; this tab closes itself in a
-couple of seconds. Do not attempt to run any further bash commands — your cwd
-is gone.
+Then report: merged `$BRANCH` into `$BASE`. Do not attempt to run any further
+bash commands — your cwd is gone; closing this pane is the coordinator's job,
+not this skill's.

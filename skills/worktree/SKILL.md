@@ -6,7 +6,8 @@ disable-model-invocation: true
 
 # Worktree dispatch
 
-Launch one or more tasks in new git worktrees using zellij or tmux tabs.
+Launch one or more tasks in new git worktrees, each agent spawned via
+`mux spawn` into its own tab.
 
 ## You are a dispatcher, not an implementer
 
@@ -29,11 +30,9 @@ ensure you have the latest version before writing prompts.
 
 - Worktrees live at `<project>__worktrees/<handle>`, a sibling of the main checkout
 - Handles: 2-4 words, kebab-case (e.g. `add-search-endpoint`)
-- Tab/window named `wt-<handle>`; its pane shows `● wt-<handle>` while working,
-  `✓ wt-<handle>` when done (status tracking via the pi-worktree extension)
+- Agent spawned via `mux spawn` with handle `wt-<handle>`, in a tab of its own
 - Base branch recorded at spawn: `git config branch.<handle>.base`
-- Status files: `<worktrees>/.status/<handle>.json` — the coordinator reads
-  these via `worktree_status` / `worktree_wait` tools
+- Prompt files live at `<worktrees>/.status/<handle>.prompt.md`
 
 ## Workflow
 
@@ -82,35 +81,24 @@ git config "branch.$HANDLE.base" "$BASE"
 bash <this skill's directory>/scripts/setup-worktree.sh "$ROOT" "$WT"
 ```
 
-Then create the tab and launch the agent. Detect the multiplexer from the
-environment and error out if neither is running:
+Then spawn the agent into a tab:
 
-**zellij:**
-
-```bash
-zellij action new-tab --name "wt-$HANDLE" --cwd "$WT" --no-focus -- \
-  env PI_WORKTREE_STATUS_DIR="$WTROOT/.status" PI_WORKTREE_HANDLE="$HANDLE" \
-  pi -a -n "wt-$HANDLE" "@$PROMPT_FILE"
+```
+mux spawn {placement: "tab", handle: "wt-$HANDLE", cwd: "$WT",
+          task: "@$PROMPT_FILE"}
 ```
 
-**tmux:**
-
-```bash
-tmux new-window -n "wt-$HANDLE" -c "$WT" -d \
-  "env PI_WORKTREE_STATUS_DIR='$WTROOT/.status' PI_WORKTREE_HANDLE='$HANDLE' pi -a -n 'wt-$HANDLE' '@$PROMPT_FILE'"
-```
-
-**Neither (`$ZELLIJ` and `$TMUX` unset):** stop and tell the user to run this
-from inside a zellij or tmux session.
+If the mux tool is missing, stop and tell the user to run this from inside a
+multiplexer session.
 
 Notes:
-- `-a` trusts project-local files for the run (avoids the interactive trust prompt blocking the agent)
-- The prompt file is passed as an `@file` message, so the agent starts working immediately
-- `--no-focus` / `-d` keep you in your own tab (background dispatch)
+- The prompt file is passed as an `@file` message, so the agent starts working
+  immediately
+- `focus` stays false: you stay in your own tab (background dispatch)
 
 ### Step 3 — Report
 
 After creating the worktrees, inform the user which handles/branches were
 created. Your task is COMPLETE once the worktrees are spawned. Do NOT
-implement anything yourself. Do NOT wait for the agents unless the user asked
-you to coordinate (that is the `/skill:coordinator` job).
+implement anything yourself. Do NOT wait for the agents — if the user asked
+for coordination, that is the coordinator skill's job, over mux.
