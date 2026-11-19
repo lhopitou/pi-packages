@@ -17,7 +17,7 @@ Pi has multiple public extension points: Agent Skills, context files, prompt tem
 
 | Goal | Build a… | Key files / locations | Detailed source of truth |
 |------|----------|-----------------------|--------------------------|
-| Teach an agent a workflow, domain, or how to use a tool/API/CLI | **Agent Skill** | `SKILL.md` plus optional `scripts/`, `references/`, `assets/` in `.agents/skills/`, `.pi/skills/`, or a package | Read `skill-creator/SKILL.md` and Pi docs `docs/skills.md` |
+| Teach an agent a workflow, domain, or how to use a tool/API/CLI | **Agent Skill** | `SKILL.md` plus optional `scripts/`, `references/`, `assets/` in `.agents/skills/`, `.pi/skills/`, or a package | Read Pi docs `docs/skills.md` |
 | Change Pi runtime behavior, add a typed tool, command, keybinding, event hook, UI, resource loader, provider, renderer, safety gate, or session behavior | **Extension** | TypeScript extension file in `.pi/extensions/`, `~/.pi/agent/extensions/`, or a Pi package | Read Pi docs `docs/extensions.md` fully plus relevant `examples/extensions/` code first |
 | Reuse a prompt pattern with variables | **Prompt template** | Markdown file in `.pi/prompts/`, `~/.pi/agent/prompts/`, or a package | Read `docs/prompt-templates.md` |
 | Set project-wide or user-wide instructions | **Context file** | `AGENTS.md`, `CLAUDE.md`, `SYSTEM.md`, or `APPEND_SYSTEM.md` as appropriate | Read the README Context Files / System Prompt sections |
@@ -77,24 +77,22 @@ Before working on a patch:
 
 ## Development repo workflow
 
-This skill lives in the `pi-packages` repo (`~/pi-packages`). All Pi extensions and skills are developed here.
+This skill lives in the `pi-packages` repo (`~/pi-packages`). Extensions, skills, prompt templates, and agent definitions are developed here; other packages come from npm (`npm:<name>` in settings).
 
-### Where to create artifacts
+### How artifacts load
 
-| Artifact | Develop in | Symlink to |
-|----------|-----------|------------|
-| Extension (single file) | `~/pi-packages/extensions/<name>.ts` | `~/.pi/agent/extensions/<name>.ts` → source |
-| Extension (directory) | `~/pi-packages/extensions/<name>/` | `~/.pi/agent/extensions/<name>` → source dir |
-| Agent Skill (global scope) | `~/pi-packages/skills/<name>/` | `~/.pi/agent/skills/` → `~/pi-packages/skills/` (single directory symlink) |
-| Agent Skill (project scope) | `~/pi-packages/.pi/skills/<name>/` | No symlink needed — Pi discovers project-scope skills automatically |
-| Prompt template | `~/pi-packages/prompts/<name>.md` | `~/.pi/agent/prompts/<name>.md` → source |
-| Theme | `~/pi-packages/themes/<name>.json` | `~/.pi/agent/themes/<name>.json` → source |
+Develop extensions in `extensions/` (single file or `<name>/index.ts`), skills in `skills/<name>/`, prompt templates in `prompts/`. The repo loads as a **local package** — `~/.pi/agent/settings.json` → `packages` → `{ "source": "../../pi-packages" }` — driven by the `pi` manifest in `package.json`; matching a manifest glob is the only registration a new artifact needs. Disable a single extension with a `-`-prefixed path in the package entry's `extensions` list in settings.
+
+Exceptions:
+
+- **Agent definitions** (`agents/*.md`) are not package resources: symlink each into `~/.pi/agent/agents/`.
+- **Project-scope skills** (`~/pi-packages/.pi/skills/<name>/`) are discovered automatically; no symlink.
+- **`config/`** files (`permissions.json`, `subagent.json`) must be real copies at `~/.pi/agent/`, never symlinks — extensions write to them at runtime.
 
 
 ### After changes
 
 - Run `/reload` in an active Pi session to pick up changes to extensions, skills, prompts, or themes.
-- For new symlinks, `/reload` is sufficient — no Pi restart needed.
 - For dependency changes, run `npm install` in the extension directory or repo root first.
 
 ## Quick-start steps
