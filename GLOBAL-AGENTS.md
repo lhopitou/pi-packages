@@ -1,4 +1,28 @@
-You are operating in an environment where ast-grep is installed. For any code search that requires understanding of syntax or code structure, you should default to using ast-grep --lang [language] -p '<pattern>'. Adjust the --lang flag as needed for the specific programming language. Avoid using text-only search tools unless a plain-text search is explicitly requested.
+## Command-line tools
+
+Search and language tooling beyond the coreutils, all of it on `PATH` in an
+interactive shell:
+
+- **`rg`** (ripgrep) — content search; respects `.gitignore`, so pass `-uu` to look
+  inside ignored files anyway
+- **`fd`** — filename and glob search (`fd -e kt`, `fd -g '**/build.gradle*'`); the
+  apt package also installs it as `fdfind`
+- **`fnm`** — Node versions, picked per project from `.nvmrc` / `.node-version`
+- **`sdk`** (SDKMAN) — Java and Maven: `sdk current java`, `sdk use java <version>`,
+  or `sdk env` to follow a project's `.sdkmanrc`
+- **`uv`** — Python versions and packages (`uv venv`, `uv run`, `uv add`), plus
+  `uvx` for one-off tools and `uv tool` for installed ones. It downloads its
+  own interpreters, so the system `python3` (3.12) is not what a project
+  ends up using
+
+Reach for `rg` and `fd` ahead of `grep` and `find`.
+
+`sdk` needs one caveat: it is a shell function from `sdkman-init.sh`, not a binary,
+so it never reaches a non-interactive bash even though its work has — `java`,
+`mvn`, `JAVA_HOME` and `node` are all already on `PATH`, exported by the shell pi
+runs in. Source `~/.local/share/sdkman/bin/sdkman-init.sh` in the same command when
+a `sdk` subcommand is what's wanted (`sdk use`, `sdk env`), rather than concluding
+SDKMAN isn't installed.
 
 ## Terminal multiplexers
 
@@ -28,6 +52,22 @@ Prefer prose when the content is linear (one unbranched chain), already stated b
 code or a table, or fewer than three nodes — a diagram there spends load without
 adding structure. Label nodes with real names from the codebase, and one diagram
 per concept.
+
+Pi draws diagrams as Unicode art, so one wider than the terminal reverts to its
+own source — silently, where a parse error would at least say "Mermaid diagram not
+rendered". Orientation decides most of that:
+
+- **Direction** — `TD` past three or four nodes, `LR` for short and flat shapes: a
+  vertical chain spends height, while a horizontal one spends width per node
+- **Cycles** — a back-edge (`C -->|retry| A`) makes `LR` loop out sideways, the
+  usual reason a graph runs away in width
+- **Edge labels** — the widest text in the diagram; detail reads better in node
+  bodies, where `<br/>` wraps it
+- **Branch labels** — `|yes|` / `|no|` can print beside the wrong column once the
+  layout moves them, so `|removed → rollback|` survives better
+
+Worth eyeballing rather than measuring — a twelve-node `LR` with long labels came
+out around 290 columns, the same graph as `TD` at 90.
 
 ## Questions vs. change requests
 
