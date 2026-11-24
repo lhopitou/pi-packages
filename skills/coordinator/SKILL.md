@@ -10,21 +10,21 @@ this multiplexer session, addressed by pane number.
 
 ## Guard
 
-The mux tool registers only when the agent runs inside a multiplexer
-session. If it is missing from your tools, the task cannot proceed: report
+The mux tools register only when the agent runs inside a multiplexer
+session. If they are missing from your tools, the task cannot proceed: report
 to the user that coordinator work needs a multiplexer session, and stop
 there.
 
 ## Pre-flight
 
-Run `mux list` before spawning. It confirms the session state and gives you
+Run `mux_list` before spawning. It confirms the session state and gives you
 your own pane number — agents report back to that number, and you embed it in
 every task prompt.
 
 ## Spawning
 
-`mux spawn` is fire-and-forget: give it a `handle`, `cwd`, and a
-self-contained `task` (inline text or `@file` for bulk). Spawned agents see
+`mux_spawn` is fire-and-forget: give it a `handle`, a `cwd`, and a
+self-contained task — `task` inline text, or `task_file` for bulk. Spawned agents see
 none of your conversation, so each prompt carries all the context the task
 needs; bulk content travels by file path, never inline.
 
@@ -49,7 +49,7 @@ after reviewing their report — one at a time.
 Two ways to learn what a subagent did. Choose by situation:
 
 **Push — the agent reports in.** Embed in the task prompt: "When finished,
-`mux send pane <N>` a brief report, ending the last line with
+`mux_send` pane <N> a brief report, ending the last line with
 `DONE <handle>`." The report arrives as a user message (`[mux] from pane N`)
 that wakes you, so you act on completion the moment it happens — update your
 records, stop the pane, spawn the next queued task. Reach for push when:
@@ -57,7 +57,7 @@ records, stop the pane, spawn the next queued task. Reach for push when:
 - runs are long — you are free to do other work; the report wakes you
 - completion must trigger follow-up (wave replacement, cleanup)
 
-**Pull — you inspect the pane.** `mux read` with `view: "state"` shows the
+**Pull — you inspect the pane.** `mux_pane` action=read with `view: "state"` shows the
 live tool call and recent messages; `view: "screen"` dumps the raw terminal;
 `wait_for` blocks until the pane says something matching. Reach for pull
 when:
@@ -73,9 +73,9 @@ the pane when a report is overdue or a claim needs checking.
 
 ## Steering
 
-`mux send` delivered to a busy agent steers it mid-run — steer, don't
+`mux_send` delivered to a busy agent steers it mid-run — steer, don't
 restart: a correction in flight saves re-running the whole task.
-`broadcast` reaches every live agent at once — use it to fan a shared
+`mux_send` action=broadcast reaches every live agent at once — use it to fan a shared
 discovery (a blocker, a superseded decision) to all in-flight siblings so
 they converge instead of each rediscovering it. A finished-but-still-live
 agent that got something wrong is fixed in place the same way: send the
@@ -85,12 +85,12 @@ Keep messages brief; bulk data travels by file path.
 
 ## Lifecycle
 
-`mux stop` closes a pane. Stop an agent after its `DONE` report — close one
+`mux_pane` action=stop closes a pane. Stop an agent after its `DONE` report — close one
 before spawning its replacement — and stop a misbehaving agent to abort it.
-At the end of a run, `mux list` is the audit: every agent you spawned is stopped.
+At the end of a run, `mux_list` is the audit: every agent you spawned is stopped.
 Panes you did not create are none of your concern.
 
 ## Recovery
 
 A failed mux call (schema typo, pane already gone) is retryable. Re-check
-`mux list` for the current pane layout, adjust, and retry.
+`mux_list` for the current pane layout, adjust, and retry.

@@ -7,7 +7,7 @@ disable-model-invocation: true
 # Worktree dispatch
 
 Launch one or more tasks in new git worktrees, each agent spawned via
-`mux spawn` into its own tab.
+`mux_spawn` into its own tab.
 
 ## You are a dispatcher, not an implementer
 
@@ -30,7 +30,7 @@ ensure you have the latest version before writing prompts.
 
 - Worktrees live at `<project>__worktrees/<handle>`, a sibling of the main checkout
 - Handles: 2-4 words, kebab-case (e.g. `add-search-endpoint`)
-- Agent spawned via `mux spawn` with handle `wt-<handle>`, in a tab of its own
+- Agent spawned via `mux_spawn` with handle `wt-<handle>`, in a tab of its own
 - Base branch recorded at spawn: `git config branch.<handle>.base`
 - Prompt files live at `<worktrees>/.status/<handle>.prompt.md`
 
@@ -84,11 +84,11 @@ bash <this skill's directory>/scripts/setup-worktree.sh "$ROOT" "$WT"
 Then spawn the agent into a tab:
 
 ```
-mux spawn {placement: "tab", handle: "wt-$HANDLE", cwd: "$WT",
-          task: "@$PROMPT_FILE"}
+mux_spawn {placement: "tab", handle: "wt-$HANDLE", cwd: "$WT",
+          task_file: "$PROMPT_FILE"}
 ```
 
-If the mux tool is missing, stop and tell the user to run this from inside a
+If the mux tools are missing, stop and tell the user to run this from inside a
 multiplexer session.
 
 Notes:

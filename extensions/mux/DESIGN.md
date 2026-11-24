@@ -52,8 +52,8 @@ it and does not need to.
 - tmux support (v1 is zellij-only; the socket layer is multiplexer-agnostic by
   construction, only `zellij.ts` would be ported).
 - Generic multiplexer tooling — raw zellij control remains bash + the zellij skill.
-- Arbitrary-command panes (`mux spawn` spawns pi only).
-- Git worktree creation (`spawn` takes a cwd; worktree setup stays with the
+- Arbitrary-command panes (`mux_spawn` spawns pi only).
+- Git worktree creation (`mux_spawn` takes a cwd; worktree setup stays with the
   coordinator flow, for now).
 - Pushed state, reports, or crash notifications — everything is on demand.
   Coordination semantics (who reports what to whom) live in prompts/skills.
@@ -98,12 +98,12 @@ flowchart LR
         D5["terminal_5.json + .sock"]
         D9["terminal_9.json + .sock"]
     end
-    A["pi, pane 5"] -->|"mux send pane=terminal_9 'done, PR opened'"| D9
+    A["pi, pane 5"] -->|"mux_send pane=terminal_9 'done, PR opened'"| D9
     D9 --> B["pi, pane 9"]
     B -->|"sendUserMessage('[mux] from pane 5: …')"| B2[agent loop]
-    A -->|"mux read pane=terminal_9 view=state"| D9
+    A -->|"mux_pane action=read pane=terminal_9 view=state"| D9
     B -->|"tool call, streaming tail, idle…"| A
-    A -->|"mux spawn handle=tests task='…'"| Z[zellij new-pane]
+    A -->|"mux_spawn handle=tests task='…'"| Z[zellij new-pane]
 ```
 
 Listener lifecycle: created on `session_start` (never from the factory — the
@@ -160,12 +160,12 @@ fallback path:
 | Situation | Diagnosis | Result |
 |---|---|---|
 | No descriptor in the dir | pane is not a mux agent (bare pane, extension not loaded) | hard error — there is **no paste fallback** |
-| Dead pid (hot) / failed signal (cold) | peer died | prune + error pointing at `mux list` |
-| Connect refused, pid alive | mid-`/reload` or a crashed listener | retry-window error; if persistent, the peer is wedged — `mux read view:screen` still reaches the pane |
+| Dead pid (hot) / failed signal (cold) | peer died | prune + error pointing at `mux_list` |
+| Connect refused, pid alive | mid-`/reload` or a crashed listener | retry-window error; if persistent, the peer is wedged — `mux_pane action=read view:screen` still reaches the pane |
 
 **Deliberately not done.** No background sweeper, no TTL or mtime staleness —
 pruning rides on demand, and age is not a liveness signal (a weeks-old agent
-is healthy). No `stop` special case — `mux stop` strands the target's
+is healthy). No `stop` special case — `mux_pane action=stop` strands the target's
 descriptor for at most one pruning cycle. Whole-session orphans (the zellij
 session itself destroyed, so no peer of it survives to scan its directory)
 are accepted garbage: `$TMPDIR` is transient, the files are ~150 bytes, and
@@ -174,35 +174,52 @@ cross-session scope, rejected.
 
 ## Tool surface
 
-A single `mux` tool with an `action` enum. One declaration, shared parameters
-stated once, one guidelines block. Per-action parameters are flat optionals;
-`execute()` cross-validates and returns instructive errors (`action "send"
-requires "text"`) so the model self-corrects in one turn.
+Four tools, one per action family — `mux_send`, `mux_pane`, `mux_list`,
+`mux_spawn` — so each family's required parameters live in the JSON schema
+itself. A single `action`-discriminated tool cannot mark per-action
+requirements, and schema-required members survive emission where models that
+stochastically drop trailing *optional* arguments mid-emission (GLM) would
+lose them: actions that share a required field are grouped (send/broadcast →
+`text`; read/stop → `pane`), and spawn's `task`/`task_file` get a schema of
+their own under a `oneOf`. `execute()` cross-validation remains as the
+runtime backstop, returning instructive errors that echo the received
+arguments so a model that believes it emitted a parameter can see the
+mismatch and self-correct in one turn.
 
 ```typescript
+// mux_send — message panes
 Type.Object({
-  action: StringEnum(["list", "send", "broadcast", "read", "spawn", "stop"]),
+  action: StringEnum(["send", "broadcast"]), // required
+  text: Type.String(),                       // required — both actions deliver text
+  pane: Type.Optional(Type.String()),        // send: target pane id, "17" ≡ "terminal_17"
+})
 
-  // shared
-  pane: Type.Optional(Type.String()), // target pane id, "17" ≡ "terminal_17"
-
-  // send/broadcast
-  text: Type.Optional(Type.String()), // message body, delivered verbatim
-
-  // read
+// mux_pane — inspect / tear down
+Type.Object({
+  action: StringEnum(["read", "stop"]),                 // required
+  pane: Type.String(),                                  // required — target pane id
   view: Type.Optional(StringEnum(["state", "screen"])), // default "state"
-  wait_for: Type.Optional(Type.String()),    // regex; blocks until matched (see read)
+  wait_for: Type.Optional(Type.String()),    // regex; blocks until matched (read)
   timeout_s: Type.Optional(Type.Number()),   // default 10 for waiting reads
+})
 
-  // spawn
-  handle: Type.Optional(Type.String()), // pane title + pi --session-id for the child
-  task: Type.Optional(Type.String()),        // inline task text (written to a prompt file)
-  task_file: Type.Optional(Type.String()),    // existing prompt file to pass as @file
-  cwd: Type.Optional(Type.String()),          // child working directory (default: own cwd)
-  model: Type.Optional(Type.String()),        // child model, "provider/modelId" (default: child's own settings)
-  placement: Type.Optional(StringEnum(["right", "down", "tab"])), // default "right"
-  focus: Type.Optional(Type.Boolean()),       // default false — never steal the user's focus
-  profile: Type.Optional(Type.String()), // named system-prompt profile for the child (--profile <name>)
+// mux_list — the session's live mux agents
+Type.Object({})
+
+// mux_spawn — create an agent pane/tab
+Type.Unsafe<SpawnParams>({
+  type: "object",
+  properties: {
+    handle: Type.Optional(Type.String()),    // pane title + pi --session-id for the child
+    task: Type.Optional(Type.String()),      // inline task text (written to a prompt file)
+    task_file: Type.Optional(Type.String()), // existing prompt file to pass as @file
+    cwd: Type.Optional(Type.String()),       // child working directory (default: own cwd)
+    model: Type.Optional(Type.String()),     // child model, "provider/modelId" (default: child's own settings)
+    placement: Type.Optional(StringEnum(["right", "down", "tab"])), // default "right"
+    focus: Type.Optional(Type.Boolean()),    // default false — never steal the user's focus
+    profile: Type.Optional(Type.String()),   // named system-prompt profile for the child (--profile <name>)
+  },
+  oneOf: [{ required: ["task"] }, { required: ["task_file"] }],
 })
 ```
 
@@ -210,41 +227,42 @@ Type.Object({
 `Schema<T>`, which TypeBox's `Static` cannot infer, so enum fields degrade to
 `unknown` in `parameters`. The local one wraps the same
 `{ type: "string", enum: [...] }` runtime schema in `Type.Unsafe` to keep the
-literal-union static type (tool.ts).
+literal-union static type (tool.ts) — `spawnParameters` uses `Type.Unsafe`
+directly, for the literal unions plus the root-level `oneOf`.
 
 ### Actions
 
-| Action | Semantics |
+| Tool / action | Semantics |
 |---|---|
-| `list` | Live mux agents of the current zellij session (session names, pids), own pane marked. Bare panes are correlated against descriptors only to drive pruning — they are not mux-addressable, so they are not listed (a hidden-count note is the only trace). Computed on demand — nothing is cached; stale descriptors are verified and pruned during the scan. |
-| `send` | `pane` + `text` → connect to the target's socket, deliver, disconnect. Recipient injects `[mux] from pane <id> (<sessionName>): <text>` as a user message (idle → turn, busy → `steer` — the message enters after the current assistant turn, not queued behind the whole run). No live listener → instructive delivery error — target dead (descriptor pruned), not an agent pane, or mid-`/reload`; see [Descriptor lifecycle and pruning](#descriptor-lifecycle-and-pruning). |
-| `broadcast` | `text` → the same message to every live mux agent of the session: the `list` scan's agent set (verification + pruning included), the own pane excluded — self-delivery would inject into the sender's own run. Delivery is the send wire path per pane, reached fresh per target so a mid-scan reload is picked up, not failed. Per-pane outcomes; a failing pane is reported, not fatal — partial delivery is a normal result, total failure an error. |
-| `read` | Inspect a pane on demand. Views below. The only blocking action (only with `wait_for`). |
-| `spawn` | Create an agent pane/tab with env forwarding + task delivery + optional named profile (`profile`, details below), register nothing, return `{paneId}`. Fire-and-forget — the new agent is an ordinary peer; whether and how it reports back is up to the prompt that tasked it. |
-| `stop` | Abort the target pane (Ctrl-c if streaming) and close it. |
+| `mux_list` | Live mux agents of the current zellij session (session names, pids), own pane marked. Bare panes are correlated against descriptors only to drive pruning — they are not mux-addressable, so they are not listed (a hidden-count note is the only trace). Computed on demand — nothing is cached; stale descriptors are verified and pruned during the scan. |
+| `mux_send` `send` | `pane` + `text` → connect to the target's socket, deliver, disconnect. Recipient injects `[mux] from pane <id> (<sessionName>): <text>` as a user message (idle → turn, busy → `steer` — the message enters after the current assistant turn, not queued behind the whole run). No live listener → instructive delivery error — target dead (descriptor pruned), not an agent pane, or mid-`/reload`; see [Descriptor lifecycle and pruning](#descriptor-lifecycle-and-pruning). |
+| `mux_send` `broadcast` | `text` → the same message to every live mux agent of the session: the `mux_list` scan's agent set (verification + pruning included), the own pane excluded — self-delivery would inject into the sender's own run. Delivery is the send wire path per pane, reached fresh per target so a mid-scan reload is picked up, not failed. Per-pane outcomes; a failing pane is reported, not fatal — partial delivery is a normal result, total failure an error. |
+| `mux_pane` `read` | Inspect a pane on demand. Views below. The only blocking action (only with `wait_for`). |
+| `mux_spawn` | Create an agent pane/tab with env forwarding + task delivery + optional named profile (`profile`, details below), register nothing, return `{paneId}`. Fire-and-forget — the new agent is an ordinary peer; whether and how it reports back is up to the prompt that tasked it. |
+| `mux_pane` `stop` | Abort the target pane (Ctrl-c if streaming) and close it. |
 
 There is deliberately **no `wait` action and no report hook**. An agent that
-wants to block can use `read` with `wait_for: "^idle$"` on `view: "state"`.
-Reporting conventions ("message pane 5 when done") belong to the instructing
-prompt — the coordinator and worktree skills will carry them after migration.
+wants to block can use `mux_pane` `read` with `wait_for: "^idle$"` on
+`view: "state"`. Reporting conventions ("message pane 5 when done") belong to
+the instructing prompt — the coordinator and worktree skills carry them.
 
 ### The `/broadcast` slash command
 
-The `broadcast` action has a human-invoked twin registered by the same
+The `mux_send` broadcast action has a human-invoked twin registered by the same
 `registerMux` (tool.ts): `/broadcast <message>`. Same `runBroadcast` core —
 the `list` scan and pruning, a fresh reach per target, per-pane outcomes —
 with the flags the action never sets:
 
 | | Invoked by | Own pane | Message |
 |---|---|---|---|
-| `mux broadcast` (tool action) | the agent, steered by its prompt | excluded — self-delivery would inject into the sender's own run | agent-to-agent: `[mux] from pane <id> (<session>): …` — provenance a peer needs |
+| `mux_send` broadcast (tool action) | the agent, steered by its prompt | excluded — self-delivery would inject into the sender's own run | agent-to-agent: `[mux] from pane <id> (<session>): …` — provenance a peer needs |
 | `/broadcast <message>` (slash command) | the human, typing it | included — the user wants every agent to get it, this pane's too | `human: true` on the wire request → injected verbatim: a regular user message, indistinguishable from typing, in this pane too |
 
 Self-delivery rides the same socket path as any peer (idle → turn, busy →
 steer), so the current session receives the message and starts processing
 it like any user input. The fan-out report goes to the human as a UI
 notification, not into the conversation. Outside zellij the command is not
-registered at all (the tool hides itself there too).
+registered at all (the tools hide themselves there too).
 
 ### `read` views
 
@@ -265,37 +283,25 @@ meaningful; for `screen`, the terminal output.
 
 ### Declaration (hidden outside zellij)
 
-The describe-image pattern: the tool registers active, but `prepareLoadout`
-returns `hiddenDeclarations: ["mux"]` unless `$ZELLIJ` is set. Hidden
-declarations also drop the tool's `promptGuidelines`, so outside zellij the
-model sees nothing. Inside zellij, the guidelines say:
-
-- Use `mux` to message and inspect other agent panes and to spawn new ones.
-- For context-demanding tasks — exploring an unfamiliar codebase, reading or
-  scanning many files, broad searches — prefer spawning a subagent (`mux
-  spawn`, task as prompt file) and reviewing its output with `mux read`,
-  keeping your own context lean. Do not delegate small tasks (a few files, a
-  quick lookup) or work that needs your conversation context: the spawned
-  agent sees none of it, so give it a self-contained task with objective,
-  constraints, and expected output.
-- Reports and coordination expectations come from the tasking prompt; deliver
-  them with `mux send`.
-- Keep `send` payloads brief — there is no size limit and no truncation in
-  the protocol; a message is injected verbatim into the peer's context. Bulk
-  data travels by file path, never inside a message.
-- For raw zellij control (layouts, floating panes, arbitrary commands,
-  `--block-until-*`), use bash + the zellij skill.
+The describe-image pattern: the tools register active, but `prepareLoadout`
+returns `hiddenDeclarations: [<tool>]` for each unless `$ZELLIJ` is set.
+Hidden declarations also drop the tools' `promptGuidelines`, so outside
+zellij the model sees nothing. Inside zellij, the guidelines are distributed
+per tool — mux_send carries delivery etiquette (brief payloads, reports come
+from the tasking prompt), mux_pane the pull-vs-push verification guidance and
+the raw-zellij-control redirect, mux_list the pre-flight note, mux_spawn the
+self-contained-task and delegate-heavy-work guidance.
 
 ## Ambient context injection
 
 At `session_start`, the `context` event injects a short block:
 
 - **Every peer:** own pane id, zellij session name, and the note that other
-  agent panes are addressable via `mux send` / `mux read` / `mux list`.
+  agent panes are addressable via `mux_send` / `mux_pane action=read` / `mux_list`.
 - **Spawned agents additionally** (detected via `PI_MUX_PARENT_*` env):
   creator identity — parent pane id, zellij session, cwd — plus the practical
   channel: "you were spawned by the agent in pane N (zellij session S); you
-  are peers — reach them with `mux send pane=N`, inspect them with `mux read`.
+  are peers — reach them with `mux_send pane=N`, inspect them with `mux_pane action=read`.
   Whether and when to report back is set by your task, not by the extension."
   This stays *informational*: the injection identifies the creator and how to
   address them, but reporting expectations come from the task prompt, never
@@ -440,7 +446,7 @@ registry rebuilt by handshakes. Superseded by the peer model: it assumed a
 coordinator-owned fleet, could not express two user-opened panes
 collaborating, pushed state the parent did not ask for, and carried
 significant connection-lifecycle machinery. Reporting moved into prompts
-(deliberate `mux send` calls), inspection became on-demand, and discovery
+(deliberate `mux_send` calls), inspection became on-demand, and discovery
 became stateless.
 
 **`transcript` read view** (tail of the target's session file, rendered from
@@ -457,13 +463,13 @@ agents ask the peer.
 Not in v1. When mux is proven:
 
 1. The worktree skill's spawn step (its hand-rolled
-   `zellij action new-tab … env PI_WORKTREE_* pi …` line) becomes `mux spawn`.
+   `zellij action new-tab … env PI_WORKTREE_* pi …` line) becomes `mux_spawn`.
 2. The pi-worktree reporter's status-file writing is dropped entirely. The
    task prompt (worktree skill) instructs the agent to report back with
-   `mux send` to the coordinator pane when done — reporting becomes an
+   `mux_send` to the coordinator pane when done — reporting becomes an
    explicit act by the agent, visible in both transcripts.
-3. The coordinator tools change shape: `worktree_status` → `mux list` +
-   on-demand `mux read`; `worktree_wait` rounds → replaced by reports
+3. The coordinator tools change shape: `worktree_status` → `mux_list` +
+   on-demand `mux_pane action=read`; `worktree_wait` rounds → replaced by reports
    arriving as user messages, with `read view:state wait_for:"^idle$"` as the
    blocking primitive when truly needed; `worktree_message` (session-file
    scraping) → dropped with the `transcript` view — reading whole session
@@ -491,7 +497,7 @@ Not in v1. When mux is proven:
 7. Kill -9 a peer → hot-path `send` returns a delivery error and unlinks
    descriptor + socket; close a pane without killing → `list` prunes it via
    the pane-absence signal; verify the files are gone in both cases.
-8. Outside zellij → `mux` absent from the model's tool list, and `/broadcast`
+8. Outside zellij → the mux tools absent from the model's tool list, and `/broadcast`
    absent from the command list.
 9. `broadcast` end-to-end: the tool action excludes the own pane and
    delivers `[mux]`-prefixed messages; `/reload`, then `/broadcast <text>`

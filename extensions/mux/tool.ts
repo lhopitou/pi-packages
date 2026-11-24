@@ -1,16 +1,30 @@
 /**
- * tool — the `mux` tool and its human-invoked twin, the `/broadcast`
- * slash command. The tool: one declaration, an `action` enum, flat optional
- * parameters, and cross-validation in `execute()` returning instructive
- * errors so the model self-corrects in one turn.
+ * tool — the mux tool family and its human-invoked twin, the `/broadcast`
+ * slash command. Four tools, one per action family, so each family's
+ * required parameters live in the JSON schema itself — a single
+ * action-discriminated tool cannot mark per-action requirements, and
+ * schema-required members survive emission where models that stochastically
+ * drop trailing *optional* arguments mid-emission (GLM) would lose them:
+ *
+ * - `mux_send`  — deliver a message to one pane, or broadcast to every
+ *                 live agent (both require `text`)
+ * - `mux_pane`  — inspect a pane (read) or abort and close it (stop)
+ *                 (both require `pane`)
+ * - `mux_list`  — the session's live mux agents
+ * - `mux_spawn` — spawn a new agent pane/tab (requires `task` or
+ *                 `task_file`, oneOf at the schema level)
+ *
+ * Cross-validation remains in `execute()` returning instructive errors —
+ * echoing the received arguments — so a model that believes it emitted a
+ * parameter can see the mismatch and self-correct in one turn.
  *
  * Failure taxonomy (no silent or fallback paths):
  * - no descriptor     → the pane is not a mux agent (extension not loaded
  *                       there) — hard error, there is no paste fallback;
  * - dead pid (hot) / failed signal (cold) → peer died — prune + error
- *                       pointing at `mux list`;
+ *                       pointing at `mux_list`;
  * - connect refused with a live pid → mid-/reload or a crashed listener —
- *                       retry-window error; `mux read view=screen` still
+ *                       retry-window error; `mux_pane` `view=screen` still
  *                       reaches the pane.
  */
 
@@ -46,7 +60,10 @@ const StringEnum = <T extends readonly string[]>(
     ...options,
   });
 
-const TOOL_NAME = "mux";
+const SEND_TOOL = "mux_send";
+const PANE_TOOL = "mux_pane";
+const LIST_TOOL = "mux_list";
+const SPAWN_TOOL = "mux_spawn";
 const DEFAULT_WAIT_TIMEOUT_S = 10;
 const WAIT_POLL_INTERVAL_MS = 1_000;
 
@@ -104,25 +121,41 @@ interface BroadcastOutcome {
   targetCount: number;
 }
 
-const parameters = Type.Object({
-  action: StringEnum(
-    ["list", "send", "broadcast", "read", "spawn", "stop"] as const,
-    {
-      description: "What to do (see the tool description).",
-    },
-  ),
+// ── schemas ─────────────────────────────────────────────────────────────
+
+// One tool per action family. Schema-level `required` is load-bearing:
+// GLM-family models stochastically drop trailing *optional* arguments
+// mid-emission (then replay the malformed pattern from their own history),
+// while required members survive — so actions that share a required field
+// are grouped (send/broadcast → text; read/stop → pane), and spawn's
+// task/task_file live in a schema of their own under a oneOf.
+
+const sendParameters = Type.Object({
+  action: StringEnum(["send", "broadcast"] as const, {
+    description:
+      "send: deliver to the pane named by `pane`. broadcast: deliver to every live mux agent at once (own pane excluded), per-pane outcomes reported.",
+  }),
+  text: Type.String({
+    description:
+      "Message body. Delivered verbatim — keep it brief; bulk data travels by file path.",
+  }),
   pane: Type.Optional(
     Type.String({
       description:
-        'Target pane id: bare number or "terminal_<n>" ("17" ≡ "terminal_17"). Titles never address anything.',
+        'send: target pane id — bare number or "terminal_<n>" ("17" ≡ "terminal_17"). Titles never address anything.',
     }),
   ),
-  text: Type.Optional(
-    Type.String({
-      description:
-        "send/broadcast: message body. Delivered verbatim — keep it brief; bulk data travels by file path.",
-    }),
-  ),
+});
+
+const paneParameters = Type.Object({
+  action: StringEnum(["read", "stop"] as const, {
+    description:
+      "read: inspect the pane on demand. stop: abort it (Ctrl-c if mid-run) and close it.",
+  }),
+  pane: Type.String({
+    description:
+      'Target pane id — bare number or "terminal_<n>" ("17" ≡ "terminal_17"). Titles never address anything.',
+  }),
   view: Type.Optional(
     StringEnum(["state", "screen"] as const, {
       description:
@@ -140,53 +173,75 @@ const parameters = Type.Object({
       description: `read with wait_for: give up after this many seconds. Default ${DEFAULT_WAIT_TIMEOUT_S}.`,
     }),
   ),
-  handle: Type.Optional(
-    Type.String({
-      description:
-        "spawn: name for the new pane/tab and the pi --session-id prefix (stable identity a human can /resume later). Default: generated.",
-    }),
-  ),
-  task: Type.Optional(
-    Type.String({
-      description:
-        "spawn: inline task text. Written to a prompt file and passed as an @file message so the agent starts working immediately.",
-    }),
-  ),
-  task_file: Type.Optional(
-    Type.String({
-      description:
-        "spawn: existing prompt file to pass as the @file task (mutually exclusive with task).",
-    }),
-  ),
-  cwd: Type.Optional(
-    Type.String({
-      description:
-        "spawn: working directory for the new agent. Default: this session's cwd.",
-    }),
-  ),
-  model: Type.Optional(
-    Type.String({
-      description:
-        'spawn: model for the new agent, "provider/modelId". Default: the child\'s own settings.',
-    }),
-  ),
-  placement: Type.Optional(
-    StringEnum(["right", "down", "tab"] as const, {
-      description:
-        "spawn: where to open. right (default) / down: a pane. tab: a new tab (needs an attached client — zellij destroys tabs in headless sessions).",
-    }),
-  ),
-  focus: Type.Optional(
-    Type.Boolean({
-      description: "spawn: steal focus to the new pane. Default false.",
-    }),
-  ),
-  profile: Type.Optional(
-    Type.String({
-      description:
-        'spawn: named system-prompt profile for the child (~/.pi/agent/profiles or the project\'s .pi/profiles — see /profile). Passed as --profile <name>; the child starts without a profile if the name is unknown.',
-    }),
-  ),
+});
+
+const listParameters = Type.Object({});
+
+interface SpawnParams {
+  handle?: string;
+  task?: string;
+  task_file?: string;
+  cwd?: string;
+  model?: string;
+  placement?: "right" | "down" | "tab";
+  focus?: boolean;
+  profile?: string;
+}
+
+const spawnParameters = Type.Unsafe<SpawnParams>({
+  type: "object",
+  properties: {
+    handle: Type.Optional(
+      Type.String({
+        description:
+          "Name for the new pane/tab and the pi --session-id prefix (stable identity a human can /resume later). Default: generated.",
+      }),
+    ),
+    task: Type.Optional(
+      Type.String({
+        description:
+          "Inline task text. Written to a prompt file and passed as an @file message so the agent starts working immediately.",
+      }),
+    ),
+    task_file: Type.Optional(
+      Type.String({
+        description:
+          "Existing prompt file to pass as the @file task (mutually exclusive with task).",
+      }),
+    ),
+    cwd: Type.Optional(
+      Type.String({
+        description:
+          "Working directory for the new agent. Default: this session's cwd.",
+      }),
+    ),
+    model: Type.Optional(
+      Type.String({
+        description:
+          'Model for the new agent, "provider/modelId". Default: the child\'s own settings.',
+      }),
+    ),
+    placement: Type.Optional(
+      StringEnum(["right", "down", "tab"] as const, {
+        description:
+          "Where to open. right (default) / down: a pane. tab: a new tab (needs an attached client — zellij destroys tabs in headless sessions).",
+      }),
+    ),
+    focus: Type.Optional(
+      Type.Boolean({
+        description: "Steal focus to the new pane. Default false.",
+      }),
+    ),
+    profile: Type.Optional(
+      Type.String({
+        description:
+          "Named system-prompt profile for the child (~/.pi/agent/profiles or the project's .pi/profiles — see /profile). Passed as --profile <name>; the child starts without a profile if the name is unknown.",
+      }),
+    ),
+  },
+  // Exactly one of task / task_file, at the schema level — see the
+  // schemas comment above.
+  oneOf: [{ required: ["task"] }, { required: ["task_file"] }],
 });
 
 // ── small helpers ───────────────────────────────────────────────────────
@@ -256,7 +311,7 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
         ok: false,
         error: result(
           `pane ${paneId} is not a mux agent — no descriptor at ${paths.descriptorPath}.\n` +
-            `The mux extension is not loaded in that pane; there is no paste fallback. Use mux list to see which panes are live agents.`,
+            `The mux extension is not loaded in that pane; there is no paste fallback. Use mux_list to see which panes are live agents.`,
           { action: "reach", pane: paneId },
           true,
         ),
@@ -271,7 +326,7 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
         return {
           ok: false,
           error: result(
-            `pane ${paneId}'s descriptor vanished mid-check (pruned concurrently?) — retry, or run mux list.`,
+            `pane ${paneId}'s descriptor vanished mid-check (pruned concurrently?) — retry, or run mux_list.`,
             { action: "reach", pane: paneId },
             true,
           ),
@@ -286,7 +341,7 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
         ok: false,
         error: result(
           `pane ${paneId}'s agent is dead (pid ${current.pid}) — pruned its stale descriptor and socket.\n` +
-            `Use mux list to see the live agents.`,
+            `Use mux_list to see the live agents.`,
           { action: "reach", pane: paneId, pruned: [paneId] },
           true,
         ),
@@ -300,7 +355,7 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
     return result(
       `${cause}\n` +
         `pane ${paneId}'s pid ${pid} is alive, so this is a mid-/reload window or a crashed listener, not a dead peer. ` +
-        `Retry after a moment. If it persists, the peer is wedged — mux read pane=${paneId} view=screen still reaches the pane; mux list re-verifies.`,
+        `Retry after a moment. If it persists, the peer is wedged — mux_pane action=read pane=${paneId} view=screen still reaches the pane; mux_list re-verifies.`,
       { action: "reach", pane: paneId, summary: "retry-window" },
       true,
     );
@@ -845,7 +900,7 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
         `  model: ${params.model ?? "(the child's own default settings)"}\n` +
         (params.profile ? `  profile: ${params.profile}\n` : "") +
         `  task: @${taskFile}\n` +
-        `Fire-and-forget — the new agent is an ordinary peer: address it with mux send pane=${paneId}, inspect it with mux read pane=${paneId}.`,
+        `Fire-and-forget — the new agent is an ordinary peer: address it with mux_send pane=${paneId}, inspect it with mux_pane action=read pane=${paneId}.`,
       { action: "spawn", handle, paneId, sessionId },
     );
   }
@@ -886,7 +941,7 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
     return result(
       `Stopped pane ${paneId}${note}: the pane is closed.` +
         (descriptor
-          ? " Its mux descriptor, if not cleaned up by the shutdown itself, is pruned on the next mux list or failed send."
+          ? " Its mux descriptor, if not cleaned up by the shutdown itself, is pruned on the next mux_list or failed send."
           : ""),
       { action: "stop", pane: paneId },
     );
@@ -894,44 +949,182 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
 
   // ── registration ───────────────────────────────────────────────────
 
+  // Every tool's first gate: mux registers only inside zellij.
+  function zellijGuard(): MuxResult | null {
+    if (deps.ownPaneId && deps.sessionName) return null;
+    return result(
+      "mux requires a zellij session ($ZELLIJ_PANE_ID / $ZELLIJ_SESSION_NAME are unset).",
+      { action: "guard" },
+      true,
+    );
+  }
+
+  /** Validation error echoing the received arguments: a model that
+   *  believes it emitted a parameter can see the mismatch — models that
+   *  drop trailing arguments mid-emission (GLM) otherwise loop on the
+   *  bare requirement, replaying their own malformed call from history. */
+  function invalidArgs(
+    action: string,
+    received: unknown,
+    message: string,
+  ): MuxResult {
+    return result(
+      `${message}\n\nReceived arguments:\n${JSON.stringify(received, null, 2)}`,
+      { action },
+      true,
+    );
+  }
+
+  /** Error wrapper shared by every tool execute. */
+  async function run(
+    action: string,
+    fn: () => Promise<MuxResult>,
+  ): Promise<MuxResult> {
+    try {
+      return await fn();
+    } catch (err) {
+      return result(`${action} failed: ${errText(err)}`, { action }, true);
+    }
+  }
+
+  // The describe-image pattern: registered and active, but hidden from the
+  // model (declaration + guidelines dropped) outside zellij, where there is
+  // no pane to address. Each tool hides itself.
+
   pi.registerTool({
-    name: TOOL_NAME,
-    label: "Agent mux",
+    name: SEND_TOOL,
+    label: "Mux send",
     description:
-      "Agent-to-agent messaging inside the current mux session. " +
-      "list: the session's live mux agents (stale descriptors are verified and pruned; bare panes are hidden). " +
-      "send pane text: deliver a message that arrives as a user message in the target pane — turn if idle, steered mid-run if busy. " +
-      "broadcast text: deliver one message to every live mux agent at once (the list action's agent set; your own pane excluded) — per-pane outcomes reported. " +
-      "read pane: inspect a peer on demand — view=state (live tool call, streaming tail, last messages), view=screen (raw dump; also works on non-agent panes); with wait_for, block until a regex matches. " +
-      "spawn: create a new agent pane/tab with env forwarding, a task file, and an optional named profile (fire-and-forget). " +
-      "stop: abort (Ctrl-c if mid-run) and close a pane. " +
+      "Message mux agent panes. " +
+      "send: deliver text to one pane — it arrives as a user message (turn if idle, steered mid-run if busy). " +
+      "broadcast: deliver one message to every live mux agent at once (the mux_list agent set; your own pane excluded) — per-pane outcomes reported. " +
       'Panes are addressed by bare pane number ("17" ≡ "terminal_17"); titles never address anything.',
     promptSnippet:
-      "message, broadcast, inspect, list, and spawn pi agents in other mux panes",
+      "send a message to one mux pane, or broadcast to every live mux agent at once",
     promptGuidelines: [
-      "Use mux to message and inspect other agent panes in this mux session, to broadcast a message to all of them at once, and to spawn new ones (mux list / send / broadcast / read / spawn / stop).",
-      "For context-demanding tasks — exploring an unfamiliar codebase, reading or scanning many files, broad searches — prefer spawning a subagent (mux spawn, task as prompt file) and reviewing its output with mux read, keeping your own context lean. Do not delegate small tasks (a few files, a quick lookup) or work that needs your conversation context: the spawned agent sees none of it, so give it a self-contained task with objective, constraints, and expected output.",
-      "Reports and coordination expectations come from the tasking prompt, not from mux: deliver them with mux send when your task says to report back.",
-      "Keep mux send payloads brief — there is no size limit and no truncation in the protocol, so a message is injected verbatim into the peer's context; bulk data travels by file path, never inside a message.",
-      "For raw zellij control (layouts, floating panes, arbitrary commands, --block-until-*), use bash plus the zellij skill instead of mux.",
+      "Deliver agent-to-agent messages with mux_send: action send targets one pane, action broadcast fans one message out to every live mux agent at once (your own pane excluded).",
+      "Reports and coordination expectations come from the tasking prompt, not from mux: deliver them with mux_send when your task says to report back.",
+      "Keep mux_send payloads brief — there is no size limit and no truncation in the protocol, so a message is injected verbatim into the peer's context; bulk data travels by file path, never inside a message.",
     ],
-    parameters,
-    // The describe-image pattern: registered and active, but hidden from the
-    // model (declaration + guidelines dropped) outside zellij, where there
-    // is no pane to address.
+    parameters: sendParameters,
     prepareLoadout: () =>
-      deps.ownPaneId ? undefined : { hiddenDeclarations: [TOOL_NAME] },
+      deps.ownPaneId ? undefined : { hiddenDeclarations: [SEND_TOOL] },
 
     renderCall(args, theme, context) {
       const text =
         (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
       let content =
-        theme.fg("toolTitle", theme.bold("mux ")) +
+        theme.fg("toolTitle", theme.bold("mux_send ")) +
         theme.fg("toolTitle", args.action ?? "…");
       if (args.pane) content += theme.fg("muted", ` pane=${args.pane}`);
-      if (args.action === "spawn" && (args.handle || args.task)) {
-        content += theme.fg("muted", ` ${args.handle ?? "…"}`);
+      text.setText(content);
+      return text;
+    },
+
+    async execute(_toolCallId, params): Promise<MuxResult> {
+      const guard = zellijGuard();
+      if (guard) return guard;
+      if (!params.text) {
+        return invalidArgs(
+          params.action,
+          params,
+          `action "${params.action}" requires a non-empty "text"`,
+        );
       }
+      const { action, pane, text } = params;
+      if (action === "send") {
+        if (!pane) {
+          return invalidArgs(action, params, 'action "send" requires "pane"');
+        }
+        return run(action, () => doSend(pane, text));
+      }
+      return run(action, () => doBroadcast(text));
+    },
+  });
+
+  pi.registerTool({
+    name: PANE_TOOL,
+    label: "Mux pane",
+    description:
+      "Inspect or stop mux agent panes. " +
+      "read: inspect a peer on demand — view=state (default; live tool call, streaming tail, last messages) or view=screen (raw zellij dump; also works on non-agent panes); with wait_for, block until a regex matches. " +
+      "stop: abort the pane (Ctrl-c if mid-run) and close it. " +
+      'Panes are addressed by bare pane number ("17" ≡ "terminal_17"); titles never address anything.',
+    promptSnippet:
+      "inspect a mux pane (live state or screen, with wait_for) or stop it",
+    promptGuidelines: [
+      'Inspect mux peers on demand with mux_pane action=read: view=state is the live snapshot; view=screen the raw terminal; wait_for blocks until a pattern matches (e.g. "^idle$"). Pull (inspect) when a report is overdue or a claim needs checking; push (report-in prompts) for completion.',
+      "mux_pane action=stop aborts a pane (Ctrl-c if mid-run) and closes it — how you tear down finished subagents.",
+      "For raw zellij control (layouts, floating panes, arbitrary commands, --block-until-*), use bash plus the zellij skill instead of mux.",
+    ],
+    parameters: paneParameters,
+    prepareLoadout: () =>
+      deps.ownPaneId ? undefined : { hiddenDeclarations: [PANE_TOOL] },
+
+    renderCall(args, theme, context) {
+      const text =
+        (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+      let content =
+        theme.fg("toolTitle", theme.bold("mux_pane ")) +
+        theme.fg("toolTitle", args.action ?? "…");
+      if (args.pane) content += theme.fg("muted", ` pane=${args.pane}`);
+      text.setText(content);
+      return text;
+    },
+
+    async execute(_toolCallId, params, signal, onUpdate): Promise<MuxResult> {
+      const guard = zellijGuard();
+      if (guard) return guard;
+      const { action, pane } = params;
+      if (action === "read") {
+        return run(action, () => doRead(pane, params, signal, onUpdate));
+      }
+      return run(action, () => doStop(pane));
+    },
+  });
+
+  pi.registerTool({
+    name: LIST_TOOL,
+    label: "Mux list",
+    description:
+      "List the live mux agents of the current zellij session (session names, pids), own pane marked. Stale descriptors are verified and pruned during the scan; bare panes are not mux-addressable and are hidden (a hidden-count note is the only trace).",
+    promptSnippet: "list the live mux agents of this zellij session",
+    promptGuidelines: [
+      "Run mux_list before spawning — it confirms the session state and gives you your own pane number, which report-back prompts must embed.",
+    ],
+    parameters: listParameters,
+    prepareLoadout: () =>
+      deps.ownPaneId ? undefined : { hiddenDeclarations: [LIST_TOOL] },
+
+    async execute(): Promise<MuxResult> {
+      const guard = zellijGuard();
+      if (guard) return guard;
+      return run("list", () => doList());
+    },
+  });
+
+  pi.registerTool({
+    name: SPAWN_TOOL,
+    label: "Mux spawn",
+    description:
+      "Spawn a new pi agent pane/tab in this zellij session with env forwarding, a task delivered as an @file message, and an optional named profile. Fire-and-forget — the new agent is an ordinary peer: message it with mux_send, inspect it with mux_pane. Give exactly one of task (inline text) or task_file (an existing prompt file).",
+    promptSnippet:
+      "spawn a pi agent into a new mux pane/tab, with env forwarding and a task",
+    promptGuidelines: [
+      "Spawn subagents with mux_spawn — fire-and-forget: give a handle, a self-contained task (inline task text, or task_file for bulk — spawned agents see none of your conversation), and optionally cwd, model, placement (right/down = pane beside you for short-lived agents; tab = own tab for long-lived or many), profile, focus.",
+      "For context-demanding tasks — exploring an unfamiliar codebase, reading or scanning many files, broad searches — prefer spawning a subagent (task as prompt file) and reviewing its output with mux_pane action=read, keeping your own context lean. Do not delegate small tasks (a few files, a quick lookup) or work that needs your conversation context: the spawned agent sees none of it, so give it a self-contained task with objective, constraints, and expected output.",
+      "For raw zellij control (layouts, floating panes, arbitrary commands, --block-until-*), use bash plus the zellij skill instead of mux.",
+    ],
+    parameters: spawnParameters,
+    prepareLoadout: () =>
+      deps.ownPaneId ? undefined : { hiddenDeclarations: [SPAWN_TOOL] },
+
+    renderCall(args, theme, context) {
+      const text =
+        (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+      const content =
+        theme.fg("toolTitle", theme.bold("mux_spawn ")) +
+        theme.fg("muted", args.handle ?? "…");
       text.setText(content);
       return text;
     },
@@ -939,78 +1132,27 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
     async execute(
       _toolCallId,
       params,
-      signal,
-      onUpdate,
+      _signal,
+      _onUpdate,
       ctx,
     ): Promise<MuxResult> {
-      if (!deps.ownPaneId || !deps.sessionName) {
-        return result(
-          "mux requires a zellij session ($ZELLIJ_PANE_ID / $ZELLIJ_SESSION_NAME are unset).",
-          { action: params.action },
-          true,
-        );
-      }
-      // Cross-validation with instructive errors: the model self-corrects
-      // in one turn.
+      const guard = zellijGuard();
+      if (guard) return guard;
+      // Cross-validation (the oneOf mostly covers this at the schema
+      // level) with instructive, echoed errors: a model that believes it
+      // emitted a task sees the mismatch and self-corrects in one turn.
       const invalid =
-        params.action === "send"
-          ? !params.pane
-            ? 'action "send" requires "pane"'
-            : params.text === undefined || params.text === ""
-              ? 'action "send" requires "text"'
-              : null
-          : params.action === "broadcast"
-            ? params.text === undefined || params.text === ""
-              ? 'action "broadcast" requires "text"'
-              : null
-            : params.action === "read"
-              ? !params.pane
-                ? 'action "read" requires "pane"'
-                : null
-              : params.action === "stop"
-                ? !params.pane
-                  ? 'action "stop" requires "pane"'
-                  : null
-                : params.action === "spawn"
-                  ? params.task === undefined && !params.task_file
-                    ? 'action "spawn" requires "task" or "task_file"'
-                    : params.task !== undefined && params.task_file
-                      ? '"task" and "task_file" are mutually exclusive'
-                      : null
-                  : null;
-      if (invalid) {
-        return result(invalid, { action: params.action }, true);
-      }
-
-      try {
-        switch (params.action) {
-          case "list":
-            return await doList();
-          case "send":
-            return await doSend(params.pane!, params.text!);
-          case "broadcast":
-            return await doBroadcast(params.text!);
-          case "read":
-            return await doRead(params.pane!, params, signal, onUpdate);
-          case "spawn":
-            return await doSpawn(
-              params,
-              ctx.cwd,
-              ctx.sessionManager.getSessionFile(),
-            );
-          case "stop":
-            return await doStop(params.pane!);
-        }
-      } catch (err) {
-        return result(
-          `${params.action} failed: ${errText(err)}`,
-          { action: params.action },
-          true,
-        );
-      }
+        params.task === undefined && params.task_file === undefined
+          ? 'spawning requires "task" or "task_file"'
+          : params.task !== undefined && params.task_file !== undefined
+            ? '"task" and "task_file" are mutually exclusive'
+            : null;
+      if (invalid) return invalidArgs("spawn", params, invalid);
+      return run("spawn", () =>
+        doSpawn(params, ctx.cwd, ctx.sessionManager.getSessionFile()),
+      );
     },
   });
-
   // ── /broadcast slash command ──────────────────────────────────────
 
   // The human-invoked twin of the broadcast action: the same runBroadcast
@@ -1024,7 +1166,7 @@ export function registerMux(pi: ExtensionAPI, deps: MuxToolDeps): void {
   if (deps.ownPaneId && deps.sessionName) {
     pi.registerCommand("broadcast", {
       description:
-        "Broadcast a message to every live mux agent in this zellij session — this pane included (the mux broadcast tool action excludes it)",
+        "Broadcast a message to every live mux agent in this zellij session — this pane included (the mux_send broadcast action excludes it)",
       handler: async (args: string, ctx) => {
         const text = args.trim();
         if (!text) {

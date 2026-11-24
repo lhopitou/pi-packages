@@ -3,18 +3,18 @@
  *
  * Every pi instance running this extension inside zellij is a peer:
  *
- * - **Addressing** — `mux send` delivers a message over a per-peer unix
+ * - **Addressing** — `mux_send` delivers a message over a per-peer unix
  *   socket; it arrives in the recipient's conversation as a user message
  *   (turn if idle, steered mid-run if busy).
- * - **Broadcasting** — the `mux broadcast` tool action and the
+ * - **Broadcasting** — the `mux_send` broadcast action and the
  *   human-typed `/broadcast` slash command fan one message out to every
  *   live peer; the action excludes the sender's own pane, the command
  *   includes it. Agent broadcasts carry a `[mux] from pane …` prefix;
  *   human broadcasts arrive verbatim, like a regular user message.
- * - **Inspection** — `mux read` returns a peer's live state (exact,
+ * - **Inspection** — `mux_pane` (action read) returns a peer's live state (exact,
  *   mid-stream, from the events this extension already receives) or its
  *   raw screen — on demand, never pushed.
- * - **Spawning** — `mux spawn` creates a new agent pane/tab with the env
+ * - **Spawning** — `mux_spawn` creates a new agent pane/tab with the env
  *   footguns handled (the zellij server's environment lacks the
  *   interactive shell's vars) and the task delivered as an @file message.
  *
@@ -23,7 +23,7 @@
  * Raw multiplexer control stays in bash (zellij skill).
  *
  * Layout: `index.ts` (this file — lifecycle wiring), `tool.ts` (the mux
- * tool + the `/broadcast` slash command), `socket.ts` (wire protocol,
+ * tools + the `/broadcast` slash command), `socket.ts` (wire protocol,
  * descriptors, listener), `zellij.ts` (raw CLI wrappers — the only
  * multiplexer-specific module).
  *
@@ -150,7 +150,7 @@ export default function muxExtension(pi: ExtensionAPI): void {
     } catch (err) {
       server = null;
       currentCtx?.ui.notify(
-        `mux: listener failed to start (${err instanceof Error ? err.message : String(err)}) — this peer cannot be addressed; mux send/read to others still works.`,
+        `mux: listener failed to start (${err instanceof Error ? err.message : String(err)}) — this peer cannot be addressed; mux_send/mux_pane to others still works.`,
         "error",
       );
     }
@@ -170,7 +170,7 @@ export default function muxExtension(pi: ExtensionAPI): void {
   });
 
   /**
-   * A pane spawned by mux spawn (PI_MUX_PARENT_SESSION_FILE is forwarded)
+   * A pane spawned by mux_spawn (PI_MUX_PARENT_SESSION_FILE is forwarded)
    * links the spawner's session file as its parent, so the session picker
    * nests spawned sessions under their spawner instead of listing every
    * one at the root.
@@ -241,11 +241,11 @@ export default function muxExtension(pi: ExtensionAPI): void {
 
     const lines = [
       `[mux] You are a pi agent running in zellij pane ${zellij.normalizePaneId(ZELLIJ_PANE_ID!)} (zellij session "${ZELLIJ_SESSION_NAME}").`,
-      `Other agent panes in this zellij session are peers, addressable with the mux tool: mux list (discover them), mux send pane=<id> (deliver a message that arrives as a user message), mux read pane=<id> (inspect live state or screen).`,
+      `Other agent panes in this zellij session are peers, addressable with the mux tools: mux_list (discover them), mux_send pane=<id> (deliver a message that arrives as a user message), mux_pane action=read pane=<id> (inspect live state or screen).`,
     ];
     if (process.env.PI_MUX_PARENT_PANE) {
       lines.push(
-        `[mux] You were spawned by the agent in pane ${process.env.PI_MUX_PARENT_PANE} (zellij session "${process.env.PI_MUX_PARENT_ZELLIJ_SESSION ?? "?"}", cwd ${process.env.PI_MUX_PARENT_CWD ?? "?"}). You are peers, not parent and child: reach them with mux send pane=${process.env.PI_MUX_PARENT_PANE}, inspect them with mux read. Whether and when to report back is set by your task, not by the extension.`,
+        `[mux] You were spawned by the agent in pane ${process.env.PI_MUX_PARENT_PANE} (zellij session "${process.env.PI_MUX_PARENT_ZELLIJ_SESSION ?? "?"}", cwd ${process.env.PI_MUX_PARENT_CWD ?? "?"}). You are peers, not parent and child: reach them with mux_send pane=${process.env.PI_MUX_PARENT_PANE}, inspect them with mux_pane action=read. Whether and when to report back is set by your task, not by the extension.`,
       );
     }
     return {
